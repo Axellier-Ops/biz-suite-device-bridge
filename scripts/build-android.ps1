@@ -3,8 +3,11 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $AndroidApp = Join-Path $RepoRoot "apps/android"
 $Downloads = Join-Path $RepoRoot "downloads/android"
+$BuildFile = Get-Content (Join-Path $AndroidApp "app/build.gradle.kts") -Raw
+$Version = if ($BuildFile -match 'versionName\s*=\s*"([^"]+)"') { $Matches[1] } else { "0.1.0" }
+$VersionedName = "Biz-Suite-Device-Bridge-Android-v$Version-debug.apk"
 
-Write-Host "Building Biz-Suite Device Bridge for Android..."
+Write-Host "Building Biz-Suite Device Bridge for Android v$Version..."
 Write-Host "Repo root: $RepoRoot"
 
 New-Item -ItemType Directory -Force -Path $Downloads | Out-Null
@@ -21,15 +24,15 @@ finally {
   Pop-Location
 }
 
-$Apks = Get-ChildItem -Path (Join-Path $AndroidApp "app/build/outputs/apk") -Filter "*.apk" -Recurse -ErrorAction SilentlyContinue
+$Apks = Get-ChildItem -Path (Join-Path $AndroidApp "app/build/outputs/apk") -Filter "*.apk" -Recurse -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
 
 if (-not $Apks -or $Apks.Count -eq 0) {
   throw "No Android .apk found under apps/android/app/build/outputs/apk"
 }
 
-foreach ($Apk in $Apks) {
-  Copy-Item $Apk.FullName -Destination $Downloads -Force
-  Write-Host "Copied: $($Apk.Name) → downloads/android/"
-}
+$Apk = $Apks[0]
+$Destination = Join-Path $Downloads $VersionedName
+Copy-Item $Apk.FullName -Destination $Destination -Force
 
-Write-Host "Done. Android APK output is in downloads/android/"
+Write-Host "Copied: $($Apk.Name) → downloads/android/$VersionedName"
+Write-Host "Done. Android APK output: $Destination"

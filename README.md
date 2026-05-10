@@ -19,18 +19,20 @@ apps/android   Android/Kotlin bridge for tablets and Bluetooth/network printers
 packages/shared-protocol   Shared job/device protocol definitions
 ```
 
-## Build outputs
+## Versioned build outputs
 
-Local scripts copy generated files into:
+Local scripts copy generated files into versioned names:
 
 ```text
-downloads/windows/   Windows .exe installer
-downloads/android/   Android .apk
+downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.0.exe
+downloads/android/Biz-Suite-Device-Bridge-Android-v0.1.0-debug.apk
 ```
 
-The `downloads` folder is ignored except for `.gitkeep`, because installer/APK files should be downloaded from local builds or GitHub Actions artifacts, not committed to Git.
+The `downloads` folder is ignored except for `.gitkeep`, because installer/APK files should be generated locally or downloaded from GitHub Actions artifacts instead of committed to Git.
 
-## Build on Windows
+## Build Windows EXE
+
+Run this on a Windows machine:
 
 ```powershell
 ./scripts/build-windows.ps1
@@ -39,7 +41,7 @@ The `downloads` folder is ignored except for `.gitkeep`, because installer/APK f
 Output:
 
 ```text
-downloads/windows/*.exe
+downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.0.exe
 ```
 
 ## Build Android APK
@@ -57,7 +59,7 @@ bash scripts/build-android.sh
 Output:
 
 ```text
-downloads/android/*.apk
+downloads/android/Biz-Suite-Device-Bridge-Android-v0.1.0-debug.apk
 ```
 
 ## Build both
@@ -87,6 +89,8 @@ Run the workflow manually, then download the artifact:
 Biz-Suite-Device-Bridge-Windows
 Biz-Suite-Device-Bridge-Android
 ```
+
+The artifact contents use the same versioned filenames as the local `downloads/` output.
 
 ## MVP target
 

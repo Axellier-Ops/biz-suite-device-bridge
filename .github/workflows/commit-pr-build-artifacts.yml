@@ -1,0 +1,85 @@
+name: Commit PR Build Artifacts
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build-and-commit-windows:
+    name: Build and commit Windows EXE
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Windows EXE into downloads
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+
+      - name: Commit Windows EXE to PR branch
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/windows/*.exe
+          if (git diff --cached --quiet) {
+            Write-Host "No Windows EXE changes to commit."
+          } else {
+            git commit -m "Add generated Windows Device Bridge EXE"
+            git push
+          }
+
+  build-and-commit-android:
+    name: Build and commit Android APK
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android APK into downloads
+        run: bash scripts/build-android.sh
+
+      - name: Commit Android APK to PR branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add downloads/android/*.apk
+          if git diff --cached --quiet; then
+            echo "No Android APK changes to commit."
+          else
+            git commit -m "Add generated Android Device Bridge APK"
+            git push
+          fi

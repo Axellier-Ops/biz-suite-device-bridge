@@ -11,47 +11,18 @@
         <div>
           <p class="eyebrow">Biz-Suite Cloud hardware connector</p>
           <h1>Biz-Suite Device Bridge</h1>
-          <p class="subtle">Windows bridge for LAN receipt printers, KOT printers and cash drawers.</p>
+          <p class="subtle">Windows bridge for LAN, Windows-installed USB/Bluetooth printers, KOT printers and cash drawers.</p>
         </div>
         <div id="status-pill" class="pill idle">Idle</div>
       </header>
 
       <section class="card">
-        <h2>Printer connection</h2>
+        <h2>Cloud pairing and job polling</h2>
         <div class="grid">
           <label>
-            Receipt printer IP
-            <input id="receipt-printer-ip" placeholder="192.168.1.50" autocomplete="off" />
+            Biz-Suite Cloud bridge URL
+            <input id="cloud-base-url" placeholder="https://your-domain.com/api/device-bridge" autocomplete="off" />
           </label>
-          <label>
-            KOT printer IP
-            <input id="kot-printer-ip" placeholder="192.168.1.51" autocomplete="off" />
-          </label>
-          <label>
-            ESC/POS port
-            <input id="printer-port" placeholder="9100" autocomplete="off" inputmode="numeric" />
-          </label>
-        </div>
-        <div class="actions">
-          <button id="save-settings">Save settings</button>
-          <button id="test-connection" class="secondary">Test receipt connection</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Test actions</h2>
-        <p class="subtle">Use these before connecting the bridge to Biz-Suite Cloud jobs.</p>
-        <div class="actions wrap">
-          <button id="sample-receipt">Print sample receipt</button>
-          <button id="sample-kot">Print sample KOT</button>
-          <button id="drawer-kick" class="danger">Open cash drawer</button>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Cloud pairing</h2>
-        <p class="subtle">Pairing is reserved for the next cloud integration step. Local printer testing works now.</p>
-        <div class="grid two">
           <label>
             Pairing code
             <input id="pairing-code" placeholder="842913" autocomplete="off" />
@@ -61,8 +32,63 @@
             <input id="device-name" placeholder="Front Counter PC" autocomplete="off" />
           </label>
         </div>
-        <div class="actions">
-          <button id="pair" class="secondary">Pair placeholder</button>
+        <div class="actions wrap">
+          <button id="save-settings">Save settings</button>
+          <button id="pair">Pair with cloud</button>
+          <button id="poll-once" class="secondary">Poll jobs once</button>
+          <button id="poll-loop" class="secondary">Run polling loop</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Printer routing</h2>
+        <div class="grid">
+          <label>
+            Receipt connection
+            <select id="receipt-connection-type">
+              <option value="lan">LAN/IP printer</option>
+              <option value="windows">Windows-installed printer</option>
+            </select>
+          </label>
+          <label>
+            Receipt IP / Windows printer name
+            <input id="receipt-printer-target" placeholder="192.168.1.50 or EPSON TM-T82" autocomplete="off" />
+          </label>
+          <label>
+            KOT IP / Windows printer name
+            <input id="kot-printer-target" placeholder="192.168.1.51 or Kitchen Printer" autocomplete="off" />
+          </label>
+          <label>
+            KOT connection
+            <select id="kot-connection-type">
+              <option value="lan">LAN/IP printer</option>
+              <option value="windows">Windows-installed printer</option>
+            </select>
+          </label>
+          <label>
+            ESC/POS port for LAN printers
+            <input id="printer-port" placeholder="9100" autocomplete="off" inputmode="numeric" />
+          </label>
+          <label>
+            Installed printers
+            <select id="installed-printers"></select>
+          </label>
+        </div>
+        <div class="actions wrap">
+          <button id="refresh-printers" class="secondary">Refresh installed printers</button>
+          <button id="use-selected-receipt" class="secondary">Use selected as receipt</button>
+          <button id="use-selected-kot" class="secondary">Use selected as KOT</button>
+          <button id="test-connection" class="secondary">Test receipt connection</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Test actions</h2>
+        <p class="subtle">Use these before connecting live Biz-Suite Cloud jobs.</p>
+        <div class="actions wrap">
+          <button id="sample-receipt">Print sample receipt</button>
+          <button id="sample-kot">Print sample KOT</button>
+          <button id="drawer-kick" class="danger">Open cash drawer</button>
         </div>
       </section>
 

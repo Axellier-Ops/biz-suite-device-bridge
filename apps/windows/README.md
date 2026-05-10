@@ -2,25 +2,62 @@
 
 Tauri/Rust desktop bridge for Windows POS counters.
 
-## What works in this testable build
+## What works in this Windows build
 
 ```text
-- Save receipt printer IP, KOT printer IP and ESC/POS port
-- Test connection to a LAN printer
+- Save Biz-Suite Cloud bridge URL
+- Pair with Biz-Suite Cloud bridge endpoint
+- Store returned device token locally
+- Poll cloud jobs manually or in a 5-second loop
+- Report job complete/fail back to Biz-Suite Cloud
+- Route receipt jobs to receipt printer
+- Route KOT jobs to KOT printer
+- Route drawer kick jobs to receipt printer
+- List Windows-installed printers
+- Print to LAN/Ethernet ESC/POS printers on port 9100
+- Print raw ESC/POS to Windows-installed printers
+- Support USB printers after they are installed in Windows as printers
+- Support Bluetooth printers after they are paired and installed in Windows as printers
 - Print sample receipt
 - Print sample KOT
-- Open cash drawer through the receipt printer
+- Open cash drawer through receipt printer
 - Keep local settings in the Windows app config folder
 ```
 
-## Hardware supported now
+## Hardware supported
+
+### Best supported
 
 ```text
 LAN/Ethernet ESC/POS thermal printers on port 9100
-Cash drawer connected to the receipt printer using RJ11/RJ12 drawer cable
+Cash drawer connected to receipt printer using RJ11/RJ12 drawer cable
 ```
 
-USB and Bluetooth printer support are not in this first Windows test build.
+### Supported through Windows printer installation
+
+```text
+USB thermal printers installed in Windows
+Bluetooth thermal printers paired and installed in Windows
+```
+
+For USB/Bluetooth, install the printer driver first, then select the Windows printer name inside the Device Bridge.
+
+## Cloud bridge endpoints expected
+
+Set the app Cloud URL to something like:
+
+```text
+https://your-domain.com/api/device-bridge
+```
+
+Expected endpoints:
+
+```text
+POST /pair
+POST /jobs/poll
+POST /jobs/{jobId}/complete
+POST /jobs/{jobId}/fail
+```
 
 ## Run locally
 
@@ -55,22 +92,34 @@ The installer should be generated under:
 apps/windows/src-tauri/target/release/bundle/nsis/
 ```
 
-## Testing steps
+## Testing LAN printer
 
 ```text
 1. Make sure the thermal printer is connected to the same network.
 2. Print the printer network configuration page and find its IP address.
+3. Choose LAN/IP printer for receipt and/or KOT.
+4. Enter printer IP.
+5. Keep port as 9100 unless the printer uses another port.
+6. Click Save settings.
+7. Click Test receipt connection.
+8. Click Print sample receipt.
+9. Click Print sample KOT.
+10. If cash drawer is plugged into receipt printer, click Open cash drawer.
+```
+
+## Testing USB or Bluetooth printer
+
+```text
+1. Install/pair the printer in Windows first.
+2. Confirm it appears in Windows Settings → Printers & scanners.
 3. Open Biz-Suite Device Bridge.
-4. Enter receipt printer IP.
-5. Enter KOT printer IP or reuse receipt printer IP.
-6. Keep port as 9100 unless the printer uses another port.
-7. Click Save settings.
-8. Click Test receipt connection.
-9. Click Print sample receipt.
-10. Click Print sample KOT.
-11. If the cash drawer is plugged into the receipt printer, click Open cash drawer.
+4. Click Refresh installed printers.
+5. Select the installed printer.
+6. Click Use selected as receipt or Use selected as KOT.
+7. Save settings.
+8. Print sample receipt or sample KOT.
 ```
 
 ## Notes
 
-The cloud pairing button is intentionally a placeholder until the Biz-Suite Cloud web app exposes the pairing and device job endpoints.
+USB/Bluetooth support uses the Windows print spooler and sends raw ESC/POS data to the installed printer. Some printer drivers may alter raw data. For reliable POS hardware, LAN/IP ESC/POS printers are still the preferred deployment.

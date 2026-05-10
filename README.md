@@ -19,6 +19,75 @@ apps/android   Android/Kotlin bridge for tablets and Bluetooth/network printers
 packages/shared-protocol   Shared job/device protocol definitions
 ```
 
+## Build outputs
+
+Local scripts copy generated files into:
+
+```text
+downloads/windows/   Windows .exe installer
+downloads/android/   Android .apk
+```
+
+The `downloads` folder is ignored except for `.gitkeep`, because installer/APK files should be downloaded from local builds or GitHub Actions artifacts, not committed to Git.
+
+## Build on Windows
+
+```powershell
+./scripts/build-windows.ps1
+```
+
+Output:
+
+```text
+downloads/windows/*.exe
+```
+
+## Build Android APK
+
+```powershell
+./scripts/build-android.ps1
+```
+
+or:
+
+```bash
+bash scripts/build-android.sh
+```
+
+Output:
+
+```text
+downloads/android/*.apk
+```
+
+## Build both
+
+```powershell
+./scripts/build-all.ps1
+```
+
+or:
+
+```bash
+bash scripts/build-all.sh
+```
+
+## GitHub Actions downloads
+
+Use the workflows from GitHub Actions:
+
+```text
+Build Windows Device Bridge
+Build Android Device Bridge
+```
+
+Run the workflow manually, then download the artifact:
+
+```text
+Biz-Suite-Device-Bridge-Windows
+Biz-Suite-Device-Bridge-Android
+```
+
 ## MVP target
 
 Start with Windows first, then Android.

@@ -2,16 +2,20 @@
   "name": "biz-suite-device-bridge-windows",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "tauri dev",
-    "build": "tauri build"
+    "dev:ui": "vite --host 127.0.0.1",
+    "build": "tauri build",
+    "build:ui": "tsc && vite build",
+    "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "@tauri-apps/api": "latest"
+    "@tauri-apps/api": "^2.2.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "latest",
-    "typescript": "latest",
-    "vite": "latest"
+    "@tauri-apps/cli": "^2.2.7",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.7"
   }
 }

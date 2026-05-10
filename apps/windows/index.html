@@ -1,25 +1,74 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Biz-Suite Device Bridge</title>
   </head>
   <body>
-    <main>
-      <h1>Biz-Suite Device Bridge</h1>
-      <p id="status">Not paired</p>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Biz-Suite Cloud hardware connector</p>
+          <h1>Biz-Suite Device Bridge</h1>
+          <p class="subtle">Windows bridge for LAN receipt printers, KOT printers and cash drawers.</p>
+        </div>
+        <div id="status-pill" class="pill idle">Idle</div>
+      </header>
 
-      <section>
-        <h2>Pair Device</h2>
-        <input id="pairing-code" placeholder="Pairing code" />
-        <button id="pair">Pair</button>
+      <section class="card">
+        <h2>Printer connection</h2>
+        <div class="grid">
+          <label>
+            Receipt printer IP
+            <input id="receipt-printer-ip" placeholder="192.168.1.50" autocomplete="off" />
+          </label>
+          <label>
+            KOT printer IP
+            <input id="kot-printer-ip" placeholder="192.168.1.51" autocomplete="off" />
+          </label>
+          <label>
+            ESC/POS port
+            <input id="printer-port" placeholder="9100" autocomplete="off" inputmode="numeric" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="save-settings">Save settings</button>
+          <button id="test-connection" class="secondary">Test receipt connection</button>
+        </div>
       </section>
 
-      <section>
-        <h2>Printer Test</h2>
-        <input id="printer-ip" placeholder="Printer IP e.g. 192.168.1.50" />
-        <button id="test-print">Test Print</button>
-        <button id="drawer-kick">Open Cash Drawer</button>
+      <section class="card">
+        <h2>Test actions</h2>
+        <p class="subtle">Use these before connecting the bridge to Biz-Suite Cloud jobs.</p>
+        <div class="actions wrap">
+          <button id="sample-receipt">Print sample receipt</button>
+          <button id="sample-kot">Print sample KOT</button>
+          <button id="drawer-kick" class="danger">Open cash drawer</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Cloud pairing</h2>
+        <p class="subtle">Pairing is reserved for the next cloud integration step. Local printer testing works now.</p>
+        <div class="grid two">
+          <label>
+            Pairing code
+            <input id="pairing-code" placeholder="842913" autocomplete="off" />
+          </label>
+          <label>
+            Device name
+            <input id="device-name" placeholder="Front Counter PC" autocomplete="off" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="pair" class="secondary">Pair placeholder</button>
+        </div>
+      </section>
+
+      <section class="card log-card">
+        <h2>Event log</h2>
+        <pre id="log">Ready.</pre>
       </section>
     </main>
 

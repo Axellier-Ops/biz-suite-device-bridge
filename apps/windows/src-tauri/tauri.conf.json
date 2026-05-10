@@ -4,22 +4,27 @@
   "version": "0.1.0",
   "identifier": "cloud.bizsuite.devicebridge",
   "build": {
-    "beforeDevCommand": "",
-    "beforeBuildCommand": "",
-    "frontendDist": "../"
+    "beforeDevCommand": "npm run dev:ui",
+    "beforeBuildCommand": "npm run build:ui",
+    "devUrl": "http://127.0.0.1:5173",
+    "frontendDist": "../dist"
   },
   "app": {
     "windows": [
       {
         "title": "Biz-Suite Device Bridge",
-        "width": 720,
-        "height": 520
+        "width": 960,
+        "height": 760,
+        "minWidth": 760,
+        "minHeight": 620
       }
     ]
   },
   "bundle": {
     "active": true,
     "targets": ["nsis"],
-    "icon": []
+    "publisher": "Axellier Ops",
+    "shortDescription": "Local hardware bridge for Biz-Suite Cloud",
+    "longDescription": "Biz-Suite Device Bridge connects Biz-Suite Cloud to local receipt printers, KOT printers and cash drawers."
   }
 }

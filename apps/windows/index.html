@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Biz-Suite Device Bridge</title>
+  </head>
+  <body>
+    <main>
+      <h1>Biz-Suite Device Bridge</h1>
+      <p id="status">Not paired</p>
+
+      <section>
+        <h2>Pair Device</h2>
+        <input id="pairing-code" placeholder="Pairing code" />
+        <button id="pair">Pair</button>
+      </section>
+
+      <section>
+        <h2>Printer Test</h2>
+        <input id="printer-ip" placeholder="Printer IP e.g. 192.168.1.50" />
+        <button id="test-print">Test Print</button>
+        <button id="drawer-kick">Open Cash Drawer</button>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

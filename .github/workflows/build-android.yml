@@ -1,0 +1,36 @@
+name: Build Android Device Bridge
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/android/**"
+      - "scripts/**"
+      - ".github/workflows/build-android.yml"
+
+jobs:
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Android APK into downloads
+        run: bash scripts/build-android.sh
+
+      - name: Upload Android downloads
+        uses: actions/upload-artifact@v4
+        with:
+          name: Biz-Suite-Device-Bridge-Android
+          path: downloads/android/*

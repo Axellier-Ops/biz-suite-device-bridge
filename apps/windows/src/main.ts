@@ -1,20 +1,33 @@
 import { invoke } from "@tauri-apps/api/core";
 import "./styles.css";
 
+type ConnectionType = "lan" | "windows";
+
 type BridgeSettings = {
-  receiptPrinterIp: string;
-  kotPrinterIp: string;
+  cloudBaseUrl: string;
+  deviceToken: string;
+  deviceId: string;
+  receiptConnectionType: ConnectionType;
+  receiptPrinterTarget: string;
+  kotConnectionType: ConnectionType;
+  kotPrinterTarget: string;
   printerPort: number;
   deviceName: string;
 };
 
 const statusPill = document.getElementById("status-pill")!;
 const logEl = document.getElementById("log")!;
-const receiptPrinterIpEl = document.getElementById("receipt-printer-ip") as HTMLInputElement;
-const kotPrinterIpEl = document.getElementById("kot-printer-ip") as HTMLInputElement;
+const cloudBaseUrlEl = document.getElementById("cloud-base-url") as HTMLInputElement;
+const receiptConnectionTypeEl = document.getElementById("receipt-connection-type") as HTMLSelectElement;
+const kotConnectionTypeEl = document.getElementById("kot-connection-type") as HTMLSelectElement;
+const receiptPrinterTargetEl = document.getElementById("receipt-printer-target") as HTMLInputElement;
+const kotPrinterTargetEl = document.getElementById("kot-printer-target") as HTMLInputElement;
 const printerPortEl = document.getElementById("printer-port") as HTMLInputElement;
 const pairingCodeEl = document.getElementById("pairing-code") as HTMLInputElement;
 const deviceNameEl = document.getElementById("device-name") as HTMLInputElement;
+const installedPrintersEl = document.getElementById("installed-printers") as HTMLSelectElement;
+
+let polling = false;
 
 function setStatus(text: string, mode: "idle" | "ok" | "error" = "idle") {
   statusPill.textContent = text;
@@ -33,8 +46,13 @@ function getPort(): number {
 
 function getSettings(): BridgeSettings {
   return {
-    receiptPrinterIp: receiptPrinterIpEl.value.trim(),
-    kotPrinterIp: kotPrinterIpEl.value.trim(),
+    cloudBaseUrl: cloudBaseUrlEl.value.trim(),
+    deviceToken: "",
+    deviceId: "",
+    receiptConnectionType: receiptConnectionTypeEl.value as ConnectionType,
+    receiptPrinterTarget: receiptPrinterTargetEl.value.trim(),
+    kotConnectionType: kotConnectionTypeEl.value as ConnectionType,
+    kotPrinterTarget: kotPrinterTargetEl.value.trim(),
     printerPort: getPort(),
     deviceName: deviceNameEl.value.trim() || "Front Counter PC",
   };
@@ -56,71 +74,100 @@ async function runAction(label: string, action: () => Promise<string>) {
 
 async function loadSettings() {
   const settings = await invoke<BridgeSettings>("load_settings");
-  receiptPrinterIpEl.value = settings.receiptPrinterIp || "";
-  kotPrinterIpEl.value = settings.kotPrinterIp || "";
+  cloudBaseUrlEl.value = settings.cloudBaseUrl || "";
+  receiptConnectionTypeEl.value = settings.receiptConnectionType || "lan";
+  kotConnectionTypeEl.value = settings.kotConnectionType || "lan";
+  receiptPrinterTargetEl.value = settings.receiptPrinterTarget || "";
+  kotPrinterTargetEl.value = settings.kotPrinterTarget || "";
   printerPortEl.value = String(settings.printerPort || 9100);
   deviceNameEl.value = settings.deviceName || "Front Counter PC";
-  log("Settings loaded.");
+  log(settings.deviceToken ? "Settings loaded. Device is paired." : "Settings loaded. Device is not paired.");
+}
+
+async function refreshPrinters() {
+  const printers = await invoke<string[]>("list_installed_printers");
+  installedPrintersEl.innerHTML = "";
+  for (const printer of printers) {
+    const option = document.createElement("option");
+    option.value = printer;
+    option.textContent = printer;
+    installedPrintersEl.appendChild(option);
+  }
+  log(`Loaded ${printers.length} installed printer(s).`);
 }
 
 document.getElementById("save-settings")?.addEventListener("click", () => {
-  runAction("Save settings", async () => {
-    return invoke<string>("save_settings", { settings: getSettings() });
+  runAction("Save settings", async () => invoke<string>("save_settings", { settings: getSettings() }));
+});
+
+document.getElementById("refresh-printers")?.addEventListener("click", () => {
+  runAction("Refresh installed printers", async () => {
+    await refreshPrinters();
+    return "Installed printers refreshed.";
   });
+});
+
+document.getElementById("use-selected-receipt")?.addEventListener("click", () => {
+  receiptConnectionTypeEl.value = "windows";
+  receiptPrinterTargetEl.value = installedPrintersEl.value;
+  log(`Receipt printer set to ${installedPrintersEl.value}.`);
+});
+
+document.getElementById("use-selected-kot")?.addEventListener("click", () => {
+  kotConnectionTypeEl.value = "windows";
+  kotPrinterTargetEl.value = installedPrintersEl.value;
+  log(`KOT printer set to ${installedPrintersEl.value}.`);
 });
 
 document.getElementById("test-connection")?.addEventListener("click", () => {
-  runAction("Connection test", async () => {
-    const settings = getSettings();
-    return invoke<string>("test_connection", {
-      printerIp: settings.receiptPrinterIp,
-      port: settings.printerPort,
-    });
-  });
+  runAction("Connection test", async () => invoke<string>("test_receipt_connection", { settings: getSettings() }));
 });
 
 document.getElementById("sample-receipt")?.addEventListener("click", () => {
-  runAction("Sample receipt", async () => {
-    const settings = getSettings();
-    return invoke<string>("print_sample_receipt", {
-      printerIp: settings.receiptPrinterIp,
-      port: settings.printerPort,
-    });
-  });
+  runAction("Sample receipt", async () => invoke<string>("print_sample_receipt", { settings: getSettings() }));
 });
 
 document.getElementById("sample-kot")?.addEventListener("click", () => {
-  runAction("Sample KOT", async () => {
-    const settings = getSettings();
-    return invoke<string>("print_sample_kot", {
-      printerIp: settings.kotPrinterIp || settings.receiptPrinterIp,
-      port: settings.printerPort,
-    });
-  });
+  runAction("Sample KOT", async () => invoke<string>("print_sample_kot", { settings: getSettings() }));
 });
 
 document.getElementById("drawer-kick")?.addEventListener("click", () => {
-  runAction("Cash drawer kick", async () => {
-    const settings = getSettings();
-    return invoke<string>("kick_drawer", {
-      printerIp: settings.receiptPrinterIp,
-      port: settings.printerPort,
-    });
-  });
+  runAction("Cash drawer kick", async () => invoke<string>("kick_drawer", { settings: getSettings() }));
 });
 
 document.getElementById("pair")?.addEventListener("click", () => {
-  runAction("Pair placeholder", async () => {
-    const code = pairingCodeEl.value.trim();
-    const settings = getSettings();
-    return invoke<string>("pair_device", {
-      pairingCode: code,
-      deviceName: settings.deviceName,
-    });
-  });
+  runAction("Cloud pairing", async () => invoke<string>("pair_device", {
+    pairingCode: pairingCodeEl.value.trim(),
+    settings: getSettings(),
+  }));
 });
 
-loadSettings().catch((error) => {
-  setStatus("Error", "error");
-  log(`Could not load settings: ${String(error)}`);
+document.getElementById("poll-once")?.addEventListener("click", () => {
+  runAction("Poll once", async () => invoke<string>("poll_jobs_once"));
 });
+
+document.getElementById("poll-loop")?.addEventListener("click", async () => {
+  if (polling) {
+    log("Polling loop already running.");
+    return;
+  }
+  polling = true;
+  setStatus("Polling", "ok");
+  log("Polling loop started. Keep this app open.");
+  while (polling) {
+    try {
+      const result = await invoke<string>("poll_jobs_once");
+      log(result);
+    } catch (error) {
+      log(`Polling error: ${String(error)}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+});
+
+loadSettings()
+  .then(refreshPrinters)
+  .catch((error) => {
+    setStatus("Error", "error");
+    log(`Startup error: ${String(error)}`);
+  });

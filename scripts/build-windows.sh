@@ -5,6 +5,8 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WINDOWS_APP="$REPO_ROOT/apps/windows"
 DOWNLOADS="$REPO_ROOT/downloads/windows"
 BUNDLE_DIR="$WINDOWS_APP/src-tauri/target/release/bundle/nsis"
+VERSION="$(node -p "require('$WINDOWS_APP/package.json').version")"
+VERSIONED_NAME="Biz-Suite-Device-Bridge-Windows-v$VERSION.exe"
 
 mkdir -p "$DOWNLOADS"
 
@@ -20,7 +22,6 @@ if [ ${#installers[@]} -eq 0 ]; then
   exit 1
 fi
 
-for installer in "${installers[@]}"; do
-  cp "$installer" "$DOWNLOADS/"
-  echo "Copied $(basename "$installer") to downloads/windows/"
-done
+latest_installer="$(ls -t "${installers[@]}" | head -n 1)"
+cp "$latest_installer" "$DOWNLOADS/$VERSIONED_NAME"
+echo "Copied $(basename "$latest_installer") to downloads/windows/$VERSIONED_NAME"

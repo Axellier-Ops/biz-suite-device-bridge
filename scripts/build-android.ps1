@@ -5,7 +5,7 @@ $AndroidApp = Join-Path $RepoRoot "apps/android"
 $Downloads = Join-Path $RepoRoot "downloads/android"
 $BuildFile = Get-Content (Join-Path $AndroidApp "app/build.gradle.kts") -Raw
 $Version = if ($BuildFile -match 'versionName\s*=\s*"([^"]+)"') { $Matches[1] } else { "0.1.0" }
-$VersionedName = "Biz-Suite-Device-Bridge-Android-v$Version-debug.apk"
+$VersionedName = "biz-suite-device-bridge-android-v$Version-debug.apk"
 
 Write-Host "Building Biz-Suite Device Bridge for Android v$Version..."
 Write-Host "Repo root: $RepoRoot"
@@ -29,6 +29,8 @@ $Apks = Get-ChildItem -Path (Join-Path $AndroidApp "app/build/outputs/apk") -Fil
 if (-not $Apks -or $Apks.Count -eq 0) {
   throw "No Android .apk found under apps/android/app/build/outputs/apk"
 }
+
+Remove-Item (Join-Path $Downloads "*.apk") -Force -ErrorAction SilentlyContinue
 
 $Apk = $Apks[0]
 $Destination = Join-Path $Downloads $VersionedName

@@ -4,9 +4,7 @@ target/
 .gradle/
 build/
 
-# generated local build artifacts
-/downloads/**
-!/downloads/.gitkeep
+# Generated public download artifacts are intentionally tracked under downloads/.
 
 # IDE / OS
 .DS_Store

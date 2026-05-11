@@ -32,5 +32,5 @@ jobs:
       - name: Upload Windows downloads
         uses: actions/upload-artifact@v4
         with:
-          name: Biz-Suite-Device-Bridge-Windows
+          name: biz-suite-device-bridge-windows
           path: downloads/windows/*

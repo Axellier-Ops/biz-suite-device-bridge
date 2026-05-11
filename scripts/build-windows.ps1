@@ -6,7 +6,7 @@ $Downloads = Join-Path $RepoRoot "downloads/windows"
 $BundleDir = Join-Path $WindowsApp "src-tauri/target/release/bundle/nsis"
 $PackageJson = Get-Content (Join-Path $WindowsApp "package.json") | ConvertFrom-Json
 $Version = $PackageJson.version
-$VersionedName = "Biz-Suite-Device-Bridge-Windows-v$Version.exe"
+$VersionedName = "biz-suite-device-bridge-windows-v$Version.exe"
 
 Write-Host "Building Biz-Suite Device Bridge for Windows v$Version..."
 Write-Host "Repo root: $RepoRoot"
@@ -27,6 +27,8 @@ $Installers = Get-ChildItem -Path $BundleDir -Filter "*.exe" -Recurse -ErrorActi
 if (-not $Installers -or $Installers.Count -eq 0) {
   throw "No Windows .exe installer found in $BundleDir"
 }
+
+Remove-Item (Join-Path $Downloads "*.exe") -Force -ErrorAction SilentlyContinue
 
 $Installer = $Installers[0]
 $Destination = Join-Path $Downloads $VersionedName

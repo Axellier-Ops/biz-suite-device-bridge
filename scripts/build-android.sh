@@ -6,7 +6,7 @@ ANDROID_APP="$REPO_ROOT/apps/android"
 DOWNLOADS="$REPO_ROOT/downloads/android"
 VERSION="$(grep -oE 'versionName = "[^"]+"' "$ANDROID_APP/app/build.gradle.kts" | head -n 1 | sed -E 's/versionName = "([^"]+)"/\1/')"
 VERSION="${VERSION:-0.1.0}"
-VERSIONED_NAME="Biz-Suite-Device-Bridge-Android-v$VERSION-debug.apk"
+VERSIONED_NAME="biz-suite-device-bridge-android-v$VERSION-debug.apk"
 
 mkdir -p "$DOWNLOADS"
 
@@ -24,5 +24,6 @@ if [ ${#apks[@]} -eq 0 ]; then
   exit 1
 fi
 
+rm -f "$DOWNLOADS"/*.apk
 cp "${apks[0]}" "$DOWNLOADS/$VERSIONED_NAME"
 echo "Copied $(basename "${apks[0]}") to downloads/android/$VERSIONED_NAME"

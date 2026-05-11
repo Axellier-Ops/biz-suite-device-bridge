@@ -151,7 +151,7 @@ async fn send_lan(target: &str, port: u16, bytes: &[u8]) -> Result<(), String> {
 
 fn send_windows_printer(printer_name: &str, bytes: &[u8]) -> Result<(), String> {
     if printer_name.trim().is_empty() { return Err("Windows printer name is required.".to_string()); }
-    let mut handle: HANDLE = 0;
+    let mut handle: HANDLE = ptr::null_mut();
     let printer_name_w = wide(printer_name);
     let doc_name_w = wide("Biz-Suite Device Bridge Job");
     let raw_w = wide("RAW");
@@ -160,8 +160,12 @@ fn send_windows_printer(printer_name: &str, bytes: &[u8]) -> Result<(), String> 
         if OpenPrinterW(printer_name_w.as_ptr(), &mut handle, ptr::null_mut()) == 0 {
             return Err(format!("Could not open Windows printer '{printer_name}'. Check it is installed and online."));
         }
-        let mut doc = DOC_INFO_1W { pDocName: doc_name_w.as_ptr() as *mut u16, pOutputFile: ptr::null_mut(), pDatatype: raw_w.as_ptr() as *mut u16 };
-        if StartDocPrinterW(handle, 1, &mut doc as *mut _ as *mut u8) == 0 {
+        let doc = DOC_INFO_1W {
+            pDocName: doc_name_w.as_ptr() as *mut u16,
+            pOutputFile: ptr::null_mut(),
+            pDatatype: raw_w.as_ptr() as *mut u16,
+        };
+        if StartDocPrinterW(handle, 1, &doc as *const DOC_INFO_1W) == 0 {
             ClosePrinter(handle);
             return Err("Could not start printer document.".to_string());
         }

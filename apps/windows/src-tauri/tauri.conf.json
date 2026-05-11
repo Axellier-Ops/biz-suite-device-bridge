@@ -23,6 +23,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
     "publisher": "Axellier Ops",
     "shortDescription": "Local hardware bridge for Biz-Suite Cloud",
     "longDescription": "Biz-Suite Device Bridge connects Biz-Suite Cloud to local receipt printers, KOT printers and cash drawers."

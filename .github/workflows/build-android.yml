@@ -32,5 +32,5 @@ jobs:
       - name: Upload Android downloads
         uses: actions/upload-artifact@v4
         with:
-          name: Biz-Suite-Device-Bridge-Android
+          name: biz-suite-device-bridge-android
           path: downloads/android/*

@@ -9,13 +9,14 @@ data class DeviceJob(val id: String, val jobType: String, val printerRole: Strin
 
 class CloudBridgeClient {
     private val baseUrl = "https://www.patas.cloud/api/device-bridge"
+    private val appVersion = "0.1.1"
 
     fun pair(code: String, deviceName: String, existingToken: String?): PairResult {
         val body = JSONObject()
             .put("pairingCode", code)
             .put("deviceName", deviceName)
             .put("platform", "android")
-            .put("appVersion", BuildConfig.VERSION_NAME)
+            .put("appVersion", appVersion)
         val response = post("/pair", body, existingToken)
         return PairResult(response.getString("deviceId"), response.getString("deviceToken"))
     }

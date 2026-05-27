@@ -24,7 +24,7 @@ packages/shared-protocol   Shared job/device protocol definitions
 Local scripts copy generated files into versioned names:
 
 ```text
-downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.2.exe
+downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.3.exe
 downloads/android/Biz-Suite-Device-Bridge-Android-v0.1.2-debug.apk
 ```
 
@@ -41,7 +41,7 @@ Run this on a Windows machine:
 Output:
 
 ```text
-downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.2.exe
+downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.3.exe
 ```
 
 ## Build Android APK

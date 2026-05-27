@@ -11,6 +11,8 @@ use std::path::PathBuf;
 use std::ptr;
 use std::time::Duration;
 use tauri::Manager;
+use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_opener::OpenerExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
@@ -29,6 +31,7 @@ const ESC_BOLD_OFF: &[u8] = b"\x1B\x45\x00";
 const ESC_CUT: &[u8] = b"\x1D\x56\x00";
 const DRAWER_KICK: &[u8] = b"\x1B\x70\x00\x19\xFA";
 const CLOUD_BRIDGE_URL: &str = "https://www.patas.cloud/api/device-bridge";
+const SETTINGS_VERSION: u32 = 1;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -38,8 +41,9 @@ enum ConnectionType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 struct BridgeSettings {
+    settings_version: u32,
     device_token: String,
     device_id: String,
     receipt_connection_type: ConnectionType,
@@ -48,11 +52,13 @@ struct BridgeSettings {
     kot_printer_target: String,
     printer_port: u16,
     device_name: String,
+    launch_on_startup: bool,
 }
 
 impl Default for BridgeSettings {
     fn default() -> Self {
         Self {
+            settings_version: SETTINGS_VERSION,
             device_token: String::new(),
             device_id: String::new(),
             receipt_connection_type: ConnectionType::Lan,
@@ -61,6 +67,7 @@ impl Default for BridgeSettings {
             kot_printer_target: String::new(),
             printer_port: 9100,
             device_name: "Front Counter PC".to_string(),
+            launch_on_startup: true,
         }
     }
 }
@@ -100,6 +107,15 @@ struct BridgeApiError {
     error: Option<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdateCheckResponse {
+    update_available: bool,
+    version: Option<String>,
+    download_url: Option<String>,
+    notes: Option<String>,
+}
+
 fn wide(value: &str) -> Vec<u16> {
     OsStr::new(value).encode_wide().chain(Some(0)).collect()
 }
@@ -129,13 +145,36 @@ fn load_settings_from_disk(app: &tauri::AppHandle) -> Result<BridgeSettings, Str
         return Ok(BridgeSettings::default());
     }
     let content = fs::read_to_string(path).map_err(|e| format!("Could not read settings: {e}"))?;
-    serde_json::from_str(&content).map_err(|e| format!("Settings file is invalid: {e}"))
+    let mut settings: BridgeSettings =
+        serde_json::from_str(&content).map_err(|e| format!("Settings file is invalid: {e}"))?;
+    if settings.settings_version < SETTINGS_VERSION {
+        settings.settings_version = SETTINGS_VERSION;
+        save_settings_to_disk(app, &settings)?;
+    }
+    Ok(settings)
 }
 
 fn save_settings_to_disk(app: &tauri::AppHandle, settings: &BridgeSettings) -> Result<(), String> {
     let path = settings_path(app)?;
     let content = serde_json::to_string_pretty(settings).map_err(|e| format!("Could not encode settings: {e}"))?;
     fs::write(path, content).map_err(|e| format!("Could not save settings: {e}"))
+}
+
+fn apply_launch_on_startup(app: &tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    let manager = app.autolaunch();
+    let is_enabled = manager
+        .is_enabled()
+        .map_err(|e| format!("Could not check start-with-Windows setting: {e}"))?;
+    if enabled && !is_enabled {
+        manager
+            .enable()
+            .map_err(|e| format!("Could not enable start-with-Windows: {e}"))?;
+    } else if !enabled && is_enabled {
+        manager
+            .disable()
+            .map_err(|e| format!("Could not disable start-with-Windows: {e}"))?;
+    }
+    Ok(())
 }
 
 async fn read_bridge_response<T: DeserializeOwned>(response: reqwest::Response, fallback: &str) -> Result<T, String> {
@@ -461,6 +500,7 @@ async fn load_settings(app: tauri::AppHandle) -> Result<BridgeSettings, String> 
 #[tauri::command]
 async fn save_settings(app: tauri::AppHandle, mut settings: BridgeSettings) -> Result<String, String> {
     let existing = load_settings_from_disk(&app).unwrap_or_default();
+    settings.settings_version = SETTINGS_VERSION;
     settings.device_token = existing.device_token;
     settings.device_id = existing.device_id;
     if !settings.device_token.trim().is_empty() {
@@ -468,7 +508,30 @@ async fn save_settings(app: tauri::AppHandle, mut settings: BridgeSettings) -> R
     }
     if settings.printer_port == 0 { return Err("Printer port is invalid.".to_string()); }
     save_settings_to_disk(&app, &settings)?;
+    apply_launch_on_startup(&app, settings.launch_on_startup)?;
     Ok("Settings saved.".to_string())
+}
+
+#[tauri::command]
+async fn check_for_updates() -> Result<UpdateCheckResponse, String> {
+    let response = reqwest::Client::new()
+        .get(format!("{CLOUD_BRIDGE_URL}/releases/windows"))
+        .query(&[("currentVersion", env!("CARGO_PKG_VERSION"))])
+        .send()
+        .await
+        .map_err(|e| format!("Could not check for updates: {e}"))?;
+    read_bridge_response(response, "Could not check for updates").await
+}
+
+#[tauri::command]
+async fn open_update_download(app: tauri::AppHandle, download_url: String) -> Result<String, String> {
+    if !download_url.starts_with("https://") {
+        return Err("Update download URL is not secure.".to_string());
+    }
+    app.opener()
+        .open_url(download_url, None::<&str>)
+        .map_err(|e| format!("Could not open update download: {e}"))?;
+    Ok("Opening the official update download in your browser.".to_string())
 }
 
 #[tauri::command]
@@ -566,7 +629,15 @@ async fn poll_jobs_once(app: tauri::AppHandle) -> Result<String, String> {
 
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![load_settings, save_settings, list_installed_printers, pair_device, test_receipt_connection, print_sample_receipt, print_sample_kot, kick_drawer, poll_jobs_once])
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let settings = load_settings_from_disk(app.handle()).unwrap_or_default();
+            apply_launch_on_startup(app.handle(), settings.launch_on_startup)
+                .map_err(std::io::Error::other)?;
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![load_settings, save_settings, check_for_updates, open_update_download, list_installed_printers, pair_device, test_receipt_connection, print_sample_receipt, print_sample_kot, kick_drawer, poll_jobs_once])
         .run(tauri::generate_context!())
         .expect("error while running Biz-Suite Device Bridge");
 }

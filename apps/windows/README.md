@@ -9,6 +9,7 @@ Tauri/Rust desktop bridge for Windows POS counters.
 - Pair with Biz-Suite Cloud using a one-time code
 - Store returned device token locally
 - Poll cloud jobs manually or in a 5-second loop
+- Start polling automatically when the app opens and the device is already paired
 - Report job complete/fail back to Biz-Suite Cloud
 - Route receipt jobs to receipt printer
 - Route KOT jobs to KOT printer
@@ -23,6 +24,9 @@ Tauri/Rust desktop bridge for Windows POS counters.
 - Print sample KOT
 - Open cash drawer through receipt printer
 - Keep local settings in the Windows app config folder
+- Preserve pairing and printer routing settings when a newer installer is installed
+- Enable start-with-Windows on first run, with a preference toggle in the app
+- Check Biz-Suite Cloud for a published newer installer and show a download prompt
 ```
 
 ## Hardware supported
@@ -43,6 +47,27 @@ Bluetooth thermal printers paired and installed in Windows
 
 For USB/Bluetooth, install the printer driver first, then select the Windows printer name inside the Device Bridge.
 When one thermal printer is detected and no printer is configured yet, the bridge selects it automatically for receipt and KOT output. If several candidate printers are installed, select the correct role manually.
+
+## Updates and saved settings
+
+The bridge stores its pairing token, device identity, printer routes and startup
+preference in its Windows application configuration directory as `settings.json`.
+Installing a newer Device Bridge version keeps this file and migrates older
+settings schemas in place.
+
+The app checks `https://www.patas.cloud/api/device-bridge/releases/windows` for
+a published newer version at startup and when the operator selects **Check for
+updates**. The cloud application supplies a secure installer URL through these
+deployment variables:
+
+```text
+DEVICE_BRIDGE_WINDOWS_LATEST_VERSION
+DEVICE_BRIDGE_WINDOWS_DOWNLOAD_URL
+DEVICE_BRIDGE_WINDOWS_RELEASE_NOTES
+```
+
+This release uses an operator-confirmed download prompt. Fully in-app automatic
+installation requires signed Tauri updater artifacts and a public updater feed.
 
 ## Cloud bridge endpoint
 

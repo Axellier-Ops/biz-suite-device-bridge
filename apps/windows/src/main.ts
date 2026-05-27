@@ -4,6 +4,7 @@ import "./styles.css";
 type ConnectionType = "lan" | "windows";
 
 type BridgeSettings = {
+  settingsVersion: number;
   deviceToken: string;
   deviceId: string;
   receiptConnectionType: ConnectionType;
@@ -12,6 +13,15 @@ type BridgeSettings = {
   kotPrinterTarget: string;
   printerPort: number;
   deviceName: string;
+  launchOnStartup: boolean;
+};
+
+type UpdateCheckResponse = {
+  updateAvailable: boolean;
+  updatesConfigured?: boolean;
+  version?: string | null;
+  downloadUrl?: string | null;
+  notes?: string | null;
 };
 
 const statusPill = document.getElementById("status-pill")!;
@@ -30,8 +40,13 @@ const pairButtonEl = document.getElementById("pair") as HTMLButtonElement;
 const repairButtonEl = document.getElementById("repair") as HTMLButtonElement;
 const pollOnceButtonEl = document.getElementById("poll-once") as HTMLButtonElement;
 const pollLoopButtonEl = document.getElementById("poll-loop") as HTMLButtonElement;
+const launchOnStartupEl = document.getElementById("launch-on-startup") as HTMLInputElement;
+const updateStatusEl = document.getElementById("update-status")!;
+const updateHelpEl = document.getElementById("update-help")!;
+const downloadUpdateButtonEl = document.getElementById("download-update") as HTMLButtonElement;
 
 let polling = false;
+let updateDownloadUrl: string | null = null;
 
 const thermalPrinterNameHints = [
   "receipt",
@@ -87,6 +102,7 @@ function getPort(): number {
 
 function getSettings(): BridgeSettings {
   return {
+    settingsVersion: 1,
     deviceToken: "",
     deviceId: "",
     receiptConnectionType: receiptConnectionTypeEl.value as ConnectionType,
@@ -95,6 +111,7 @@ function getSettings(): BridgeSettings {
     kotPrinterTarget: kotPrinterTargetEl.value.trim(),
     printerPort: getPort(),
     deviceName: deviceNameEl.value.trim() || "Front Counter PC",
+    launchOnStartup: launchOnStartupEl.checked,
   };
 }
 
@@ -120,8 +137,37 @@ async function loadSettings() {
   kotPrinterTargetEl.value = settings.kotPrinterTarget || "";
   printerPortEl.value = String(settings.printerPort || 9100);
   deviceNameEl.value = settings.deviceName || "Front Counter PC";
+  launchOnStartupEl.checked = settings.launchOnStartup !== false;
   setPairingState(Boolean(settings.deviceToken));
   log(settings.deviceToken ? "Settings loaded. Device is paired." : "Settings loaded. Device is not paired.");
+}
+
+async function checkForUpdates() {
+  updateStatusEl.textContent = "Checking";
+  updateStatusEl.className = "pair-state not-paired";
+  downloadUpdateButtonEl.classList.add("hidden");
+  updateDownloadUrl = null;
+  const update = await invoke<UpdateCheckResponse>("check_for_updates");
+  if (!update.updateAvailable || !update.version || !update.downloadUrl) {
+    if (update.updatesConfigured === false) {
+      updateStatusEl.textContent = "Manual updates";
+      updateStatusEl.className = "pair-state not-paired";
+      updateHelpEl.textContent =
+        "Your settings are retained during updates. An update notice will appear after an official installer is published.";
+      return "No automatic update download has been published yet.";
+    }
+    updateStatusEl.textContent = "Up to date";
+    updateStatusEl.className = "pair-state paired";
+    updateHelpEl.textContent =
+      "Your pairing and printer connections are stored on this computer and kept when the app is updated.";
+    return "Device Bridge is up to date.";
+  }
+  updateDownloadUrl = update.downloadUrl;
+  updateStatusEl.textContent = `v${update.version} available`;
+  updateStatusEl.className = "pair-state update-available";
+  updateHelpEl.textContent = update.notes || "A new Device Bridge installer is available. Your existing settings will be retained.";
+  downloadUpdateButtonEl.classList.remove("hidden");
+  return `Device Bridge v${update.version} is available.`;
 }
 
 function autoDetectedPrinter(printers: string[]): string | null {
@@ -168,6 +214,21 @@ async function refreshPrinters(autoConfigure = false) {
 
 document.getElementById("save-settings")?.addEventListener("click", () => {
   runAction("Save printer settings", async () => invoke<string>("save_settings", { settings: getSettings() }));
+});
+
+launchOnStartupEl.addEventListener("change", () => {
+  runAction("Startup preference", async () => invoke<string>("save_settings", { settings: getSettings() }));
+});
+
+document.getElementById("check-updates")?.addEventListener("click", () => {
+  runAction("Update check", checkForUpdates);
+});
+
+downloadUpdateButtonEl.addEventListener("click", () => {
+  if (!updateDownloadUrl) return;
+  runAction("Update download", async () =>
+    invoke<string>("open_update_download", { downloadUrl: updateDownloadUrl }),
+  );
 });
 
 document.getElementById("refresh-printers")?.addEventListener("click", () => {
@@ -220,6 +281,7 @@ document.getElementById("pair")?.addEventListener("click", () => {
       settings: getSettings(),
     });
     setPairingState(true);
+    void startPollingLoop("Device paired. Polling started automatically.");
     return result;
   });
 });
@@ -233,18 +295,12 @@ document.getElementById("poll-once")?.addEventListener("click", () => {
   runAction("Poll once", async () => invoke<string>("poll_jobs_once"));
 });
 
-document.getElementById("poll-loop")?.addEventListener("click", async () => {
-  if (polling) {
-    polling = false;
-    pollLoopButtonEl.textContent = "Run polling loop";
-    setStatus("Paired", "ok");
-    log("Polling loop stopped.");
-    return;
-  }
+async function startPollingLoop(reason: string) {
+  if (polling) return;
   polling = true;
   pollLoopButtonEl.textContent = "Stop polling loop";
   setStatus("Polling", "ok");
-  log("Polling loop started. Keep this app open.");
+  log(`${reason} Keep this app open.`);
   while (polling) {
     try {
       const result = await invoke<string>("poll_jobs_once");
@@ -254,10 +310,36 @@ document.getElementById("poll-loop")?.addEventListener("click", async () => {
     }
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
+}
+
+document.getElementById("poll-loop")?.addEventListener("click", () => {
+  if (polling) {
+    polling = false;
+    pollLoopButtonEl.textContent = "Run polling loop";
+    setStatus("Paired", "ok");
+    log("Polling loop stopped.");
+    return;
+  }
+  void startPollingLoop("Polling loop started.");
 });
 
 loadSettings()
-  .then(() => refreshPrinters(true))
+  .then(async () => {
+    const isPaired = !pollOnceButtonEl.disabled;
+    await refreshPrinters(true);
+    try {
+      await checkForUpdates();
+    } catch (error) {
+      updateStatusEl.textContent = "Manual updates";
+      updateStatusEl.className = "pair-state not-paired";
+      updateHelpEl.textContent =
+        "Your settings are retained during updates. The update service is not available right now.";
+      log(`Update check unavailable: ${String(error)}`);
+    }
+    if (isPaired) {
+      void startPollingLoop("Device is paired. Polling started automatically.");
+    }
+  })
   .catch((error) => {
     setStatus("Error", "error");
     log(`Startup error: ${String(error)}`);

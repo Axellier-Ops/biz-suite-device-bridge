@@ -14,7 +14,7 @@ Current build:
 Build target:
 
 ```text
-Biz-Suite-Device-Bridge-Android-v0.1.1-debug.apk
+Biz-Suite-Device-Bridge-Android-v0.1.2-debug.apk
 ```
 
 Bluetooth printing and background/foreground-service polling are not part of

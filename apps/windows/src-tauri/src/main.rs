@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -260,6 +262,18 @@ fn money(value: f64) -> String {
     format!("{value:.2}")
 }
 
+fn currency(value: f64) -> String {
+    format!("LKR {}", money(value))
+}
+
+fn quantity(value: f64) -> String {
+    if value.fract() == 0.0 {
+        format!("{value:.0}")
+    } else {
+        money(value)
+    }
+}
+
 fn item_quantity(item: &Value) -> f64 {
     payload_number(item, "quantity")
 }
@@ -297,10 +311,10 @@ fn receipt_bytes_from_payload(payload: &Value) -> Vec<u8> {
     if let Some(items) = payload.get("items").and_then(|items| items.as_array()) {
         for item in items {
             let name = payload_string(item, "name").unwrap_or_else(|| "Item".to_string());
-            let quantity = item_quantity(item);
+            let item_quantity = item_quantity(item);
             let total = payload_number(item, "total");
-            let label = truncate_chars(&format!("{} x {}", money(quantity), clean_text(&name)), 21);
-            b.extend_from_slice(format!("{:<21}{:>11}\n", label, money(total)).as_bytes());
+            let label = truncate_chars(&format!("{}x {}", quantity(item_quantity), clean_text(&name)), 21);
+            b.extend_from_slice(format!("{:<21}{:>11}\n", label, currency(total)).as_bytes());
             if let Some(notes) = payload_string(item, "notes") {
                 b.extend_from_slice(format!("  Note: {}\n", truncate_chars(&clean_text(&notes), 28)).as_bytes());
             }
@@ -308,21 +322,21 @@ fn receipt_bytes_from_payload(payload: &Value) -> Vec<u8> {
     }
 
     b.extend_from_slice(b"--------------------------------\n");
-    b.extend(line("Subtotal", &money(payload_number(payload, "subtotal"))).as_slice());
+    b.extend(line("Subtotal", &currency(payload_number(payload, "subtotal"))).as_slice());
     let discount = payload_number(payload, "discount");
     if discount > 0.0 {
-        b.extend(line("Discount", &format!("-{}", money(discount))).as_slice());
+        b.extend(line("Discount", &format!("-{}", currency(discount))).as_slice());
     }
     let service_charge = payload_number(payload, "serviceCharge");
     if service_charge > 0.0 {
-        b.extend(line("Service", &money(service_charge)).as_slice());
+        b.extend(line("Service", &currency(service_charge)).as_slice());
     }
     let tax = payload_number(payload, "tax");
     if tax > 0.0 {
-        b.extend(line("Tax", &money(tax)).as_slice());
+        b.extend(line("VAT (15%)", &currency(tax)).as_slice());
     }
     b.extend_from_slice(ESC_BOLD_ON);
-    b.extend(line("Total", &money(payload_number(payload, "total"))).as_slice());
+    b.extend(line("TOTAL", &currency(payload_number(payload, "total"))).as_slice());
     b.extend_from_slice(ESC_BOLD_OFF);
 
     if let Some(payment_method) = payload_string(payload, "paymentMethod") {
@@ -380,14 +394,23 @@ fn kot_bytes_from_payload(payload: &Value) -> Vec<u8> {
 }
 
 fn sample_receipt_bytes() -> Vec<u8> {
-    let mut b = Vec::new();
-    b.extend_from_slice(ESC_INIT); b.extend_from_slice(ESC_ALIGN_CENTER); b.extend_from_slice(ESC_BOLD_ON);
-    b.extend_from_slice(b"BIZ-SUITE CLOUD\n"); b.extend_from_slice(ESC_BOLD_OFF);
-    b.extend_from_slice(b"Sample Receipt\nDevice Bridge Test\n\n"); b.extend_from_slice(ESC_ALIGN_LEFT);
-    b.extend_from_slice(b"Order: TEST-1001\nCashier: Test User\n--------------------------------\n");
-    b.extend_from_slice(b"2 x Chicken Kottu        24.00\n1 x Lime Juice            5.50\n--------------------------------\n");
-    b.extend(line("Subtotal", "29.50").as_slice()); b.extend(line("Service", "2.95").as_slice()); b.extend(line("Total", "32.45").as_slice());
-    b.extend_from_slice(b"\nPayment: CASH\n\nThank you.\n\n\n"); b.extend_from_slice(ESC_CUT); b
+    receipt_bytes_from_payload(&serde_json::json!({
+        "businessName": "Demo F&B",
+        "address": "123 Demo Street",
+        "phone": "+94 11 234 5678",
+        "orderNumber": "TEST-1001",
+        "tableName": "Table 04",
+        "items": [
+            { "name": "Chicken Kottu", "quantity": 2, "total": 2400.00 },
+            { "name": "Lime Juice", "quantity": 1, "total": 550.00 }
+        ],
+        "subtotal": 2950.00,
+        "discount": 0.00,
+        "serviceCharge": 295.00,
+        "tax": 486.75,
+        "total": 3731.75,
+        "paymentMethod": "cash"
+    }))
 }
 
 fn sample_kot_bytes() -> Vec<u8> {

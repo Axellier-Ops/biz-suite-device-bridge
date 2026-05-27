@@ -1,6 +1,6 @@
 [package]
 name = "biz_suite_device_bridge"
-version = "0.1.1"
+version = "0.1.2"
 description = "Biz-Suite Device Bridge for Windows"
 authors = ["Axellier Ops"]
 edition = "2021"

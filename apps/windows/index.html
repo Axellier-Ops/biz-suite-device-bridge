@@ -17,12 +17,12 @@
       </header>
 
       <section class="card">
-        <h2>Cloud pairing and job polling</h2>
+        <div class="section-heading">
+          <h2>Cloud pairing and job polling</h2>
+          <div id="pairing-status" class="pair-state not-paired">Not paired</div>
+        </div>
+        <p id="pairing-help" class="subtle">Connects securely to Biz-Suite Cloud. Enter the one-time pairing code from your POS settings.</p>
         <div class="grid">
-          <label>
-            Biz-Suite Cloud bridge URL
-            <input id="cloud-base-url" placeholder="https://your-domain.com/api/device-bridge" autocomplete="off" />
-          </label>
           <label>
             Pairing code
             <input id="pairing-code" placeholder="842913" autocomplete="off" />
@@ -33,15 +33,19 @@
           </label>
         </div>
         <div class="actions wrap">
-          <button id="save-settings">Save settings</button>
           <button id="pair">Pair with cloud</button>
-          <button id="poll-once" class="secondary">Poll jobs once</button>
-          <button id="poll-loop" class="secondary">Run polling loop</button>
+          <button id="repair" class="outline hidden">Pair another device</button>
+          <button id="poll-once" class="secondary" disabled>Poll jobs once</button>
+          <button id="poll-loop" class="secondary" disabled>Run polling loop</button>
         </div>
       </section>
 
       <section class="card">
-        <h2>Printer routing</h2>
+        <div class="section-heading">
+          <h2>Printer routing</h2>
+          <button id="refresh-printers" class="outline-success compact">Refresh installed printers</button>
+        </div>
+        <p class="subtle">A single Windows-installed thermal printer is set automatically as receipt and KOT. Select manually when several printers are installed.</p>
         <div class="grid">
           <label>
             Receipt connection
@@ -75,7 +79,7 @@
           </label>
         </div>
         <div class="actions wrap">
-          <button id="refresh-printers" class="secondary">Refresh installed printers</button>
+          <button id="save-settings">Save printer settings</button>
           <button id="use-selected-receipt" class="secondary">Use selected as receipt</button>
           <button id="use-selected-kot" class="secondary">Use selected as KOT</button>
           <button id="test-connection" class="secondary">Test receipt connection</button>

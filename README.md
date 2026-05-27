@@ -15,7 +15,7 @@ The cloud app creates device jobs. The local bridge securely pairs with a tenant
 
 ```text
 apps/windows   Tauri/Rust desktop bridge for Windows POS counters
-apps/android   Android/Kotlin bridge for tablets and Bluetooth/network printers
+apps/android   Android/Kotlin bridge for tablets and LAN printers
 packages/shared-protocol   Shared job/device protocol definitions
 ```
 
@@ -24,8 +24,8 @@ packages/shared-protocol   Shared job/device protocol definitions
 Local scripts copy generated files into versioned names:
 
 ```text
-downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.0.exe
-downloads/android/Biz-Suite-Device-Bridge-Android-v0.1.0-debug.apk
+downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.1.exe
+downloads/android/Biz-Suite-Device-Bridge-Android-v0.1.1-debug.apk
 ```
 
 The `downloads` folder is ignored except for `.gitkeep`, because installer/APK files should be generated locally or downloaded from GitHub Actions artifacts instead of committed to Git.
@@ -41,7 +41,7 @@ Run this on a Windows machine:
 Output:
 
 ```text
-downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.0.exe
+downloads/windows/Biz-Suite-Device-Bridge-Windows-v0.1.1.exe
 ```
 
 ## Build Android APK
@@ -59,7 +59,7 @@ bash scripts/build-android.sh
 Output:
 
 ```text
-downloads/android/Biz-Suite-Device-Bridge-Android-v0.1.0-debug.apk
+downloads/android/Biz-Suite-Device-Bridge-Android-v0.1.1-debug.apk
 ```
 
 ## Build both

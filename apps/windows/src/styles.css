@@ -14,7 +14,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -53,6 +54,18 @@ h1 {
 h2 {
   font-size: 18px;
   margin-bottom: 14px;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.section-heading h2 {
+  margin-bottom: 0;
 }
 
 .subtle {
@@ -96,7 +109,23 @@ input {
   color: #172026;
 }
 
-input:focus {
+select {
+  width: 100%;
+  border: 1px solid #ccd3da;
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: #ffffff;
+  color: #172026;
+}
+
+input:disabled {
+  background: #f2f5f4;
+  color: #68747d;
+  cursor: not-allowed;
+}
+
+input:focus,
+select:focus {
   outline: 2px solid #1f7a5c33;
   border-color: #1f7a5c;
 }
@@ -119,6 +148,22 @@ button {
   color: #ffffff;
   background: #172026;
   font-weight: 800;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+
+button:hover:not(:disabled) {
+  background: #293942;
+  box-shadow: 0 4px 12px rgba(23, 32, 38, 0.14);
+  transform: translateY(-1px);
+}
+
+button:focus-visible {
+  outline: 3px solid #1f7a5c33;
+  outline-offset: 2px;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button.secondary {
@@ -126,8 +171,69 @@ button.secondary {
   color: #172026;
 }
 
+button.secondary:hover:not(:disabled) {
+  background: #dbe4e9;
+}
+
 button.danger {
   background: #a83d32;
+}
+
+button.danger:hover:not(:disabled) {
+  background: #913329;
+}
+
+button.outline,
+button.outline-success {
+  background: #ffffff;
+  border: 1px solid #c6d2d8;
+  color: #172026;
+}
+
+button.outline:hover:not(:disabled) {
+  background: #f2f5f7;
+  border-color: #a9bac2;
+}
+
+button.outline-success {
+  border-color: #1f7a5c;
+  color: #166143;
+}
+
+button.outline-success:hover:not(:disabled) {
+  background: #e9f6f0;
+  border-color: #166143;
+}
+
+button.compact {
+  padding: 9px 14px;
+  font-size: 14px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.hidden {
+  display: none;
+}
+
+.pair-state {
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.pair-state.not-paired {
+  background: #e8edf1;
+  color: #52616b;
+}
+
+.pair-state.paired {
+  background: #dff4ea;
+  color: #166143;
 }
 
 .pill {
@@ -176,5 +282,10 @@ button.danger {
   .grid.two {
     grid-template-columns: 1fr;
     display: grid;
+  }
+
+  .section-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

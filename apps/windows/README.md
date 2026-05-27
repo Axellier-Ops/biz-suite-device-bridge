@@ -5,8 +5,8 @@ Tauri/Rust desktop bridge for Windows POS counters.
 ## What works in this Windows build
 
 ```text
-- Save Biz-Suite Cloud bridge URL
-- Pair with Biz-Suite Cloud bridge endpoint
+- Connect to the production Biz-Suite Cloud bridge endpoint
+- Pair with Biz-Suite Cloud using a one-time code
 - Store returned device token locally
 - Poll cloud jobs manually or in a 5-second loop
 - Report job complete/fail back to Biz-Suite Cloud
@@ -14,6 +14,7 @@ Tauri/Rust desktop bridge for Windows POS counters.
 - Route KOT jobs to KOT printer
 - Route drawer kick jobs to receipt printer
 - List Windows-installed printers
+- Auto-select a single detected Windows-installed thermal printer for receipt and KOT routing
 - Print to LAN/Ethernet ESC/POS printers on port 9100
 - Print raw ESC/POS to Windows-installed printers
 - Support USB printers after they are installed in Windows as printers
@@ -41,16 +42,17 @@ Bluetooth thermal printers paired and installed in Windows
 ```
 
 For USB/Bluetooth, install the printer driver first, then select the Windows printer name inside the Device Bridge.
+When one thermal printer is detected and no printer is configured yet, the bridge selects it automatically for receipt and KOT output. If several candidate printers are installed, select the correct role manually.
 
-## Cloud bridge endpoints expected
+## Cloud bridge endpoint
 
-Set the app Cloud URL to something like:
+The Windows bridge connects to the production endpoint internally:
 
 ```text
-https://your-domain.com/api/device-bridge
+https://www.patas.cloud/api/device-bridge
 ```
 
-Expected endpoints:
+The endpoint exposes:
 
 ```text
 POST /pair
@@ -69,6 +71,10 @@ Rust stable
 Microsoft WebView2 Runtime
 Windows machine for installer testing
 ```
+
+Supported deployment targets are Windows 10 and Windows 11. Current Microsoft
+Edge WebView2 runtime installers are not a viable target for Windows 7/8-era
+machines.
 
 Commands:
 
@@ -92,6 +98,11 @@ The installer should be generated under:
 apps/windows/src-tauri/target/release/bundle/nsis/
 ```
 
+The installer embeds the offline Microsoft Edge WebView2 Runtime installer so
+setup can complete on Windows 10/11 POS machines even when WebView2 is missing
+or the machine is offline during installation. This intentionally makes the
+installer much larger than the previous online-bootstrapper build.
+
 ## Testing LAN printer
 
 ```text
@@ -113,11 +124,10 @@ apps/windows/src-tauri/target/release/bundle/nsis/
 1. Install/pair the printer in Windows first.
 2. Confirm it appears in Windows Settings → Printers & scanners.
 3. Open Biz-Suite Device Bridge.
-4. Click Refresh installed printers.
-5. Select the installed printer.
-6. Click Use selected as receipt or Use selected as KOT.
-7. Save settings.
-8. Print sample receipt or sample KOT.
+4. If exactly one thermal printer is available, confirm it has been selected automatically.
+5. If several printers appear, select the installed printer and click Use selected as receipt or Use selected as KOT.
+6. Save settings.
+7. Print sample receipt or sample KOT.
 ```
 
 ## Notes

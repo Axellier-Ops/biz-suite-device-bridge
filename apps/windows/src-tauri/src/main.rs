@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::ffi::OsStr;
 use std::fs;
@@ -25,6 +26,7 @@ const ESC_BOLD_ON: &[u8] = b"\x1B\x45\x01";
 const ESC_BOLD_OFF: &[u8] = b"\x1B\x45\x00";
 const ESC_CUT: &[u8] = b"\x1D\x56\x00";
 const DRAWER_KICK: &[u8] = b"\x1B\x70\x00\x19\xFA";
+const CLOUD_BRIDGE_URL: &str = "https://www.patas.cloud/api/device-bridge";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -36,7 +38,6 @@ enum ConnectionType {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct BridgeSettings {
-    cloud_base_url: String,
     device_token: String,
     device_id: String,
     receipt_connection_type: ConnectionType,
@@ -50,7 +51,6 @@ struct BridgeSettings {
 impl Default for BridgeSettings {
     fn default() -> Self {
         Self {
-            cloud_base_url: String::new(),
             device_token: String::new(),
             device_id: String::new(),
             receipt_connection_type: ConnectionType::Lan,
@@ -93,6 +93,11 @@ struct PollResponse {
     jobs: Vec<DeviceJob>,
 }
 
+#[derive(Debug, Deserialize)]
+struct BridgeApiError {
+    error: Option<String>,
+}
+
 fn wide(value: &str) -> Vec<u16> {
     OsStr::new(value).encode_wide().chain(Some(0)).collect()
 }
@@ -129,6 +134,28 @@ fn save_settings_to_disk(app: &tauri::AppHandle, settings: &BridgeSettings) -> R
     let path = settings_path(app)?;
     let content = serde_json::to_string_pretty(settings).map_err(|e| format!("Could not encode settings: {e}"))?;
     fs::write(path, content).map_err(|e| format!("Could not save settings: {e}"))
+}
+
+async fn read_bridge_response<T: DeserializeOwned>(response: reqwest::Response, fallback: &str) -> Result<T, String> {
+    let status = response.status();
+    if !status.is_success() {
+        let message = response.json::<BridgeApiError>().await.ok()
+            .and_then(|body| body.error)
+            .unwrap_or_else(|| format!("{fallback} ({status})."));
+        return Err(message);
+    }
+    response.json::<T>().await.map_err(|e| format!("{fallback}: invalid response ({e})"))
+}
+
+async fn require_bridge_success(response: reqwest::Response, fallback: &str) -> Result<(), String> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(());
+    }
+    let message = response.json::<BridgeApiError>().await.ok()
+        .and_then(|body| body.error)
+        .unwrap_or_else(|| format!("{fallback} ({status})."));
+    Err(message)
 }
 
 async fn connect_lan_printer(target: &str, port: u16) -> Result<TcpStream, String> {
@@ -185,6 +212,19 @@ fn send_windows_printer(printer_name: &str, bytes: &[u8]) -> Result<(), String> 
     Ok(())
 }
 
+fn validate_windows_printer(printer_name: &str) -> Result<(), String> {
+    if printer_name.trim().is_empty() { return Err("Windows printer name is required.".to_string()); }
+    let mut handle: HANDLE = ptr::null_mut();
+    let printer_name_w = wide(printer_name);
+    unsafe {
+        if OpenPrinterW(printer_name_w.as_ptr(), &mut handle, ptr::null_mut()) == 0 {
+            return Err(format!("Could not open Windows printer '{printer_name}'. Check it is installed and online."));
+        }
+        ClosePrinter(handle);
+    }
+    Ok(())
+}
+
 async fn send_to_target(connection_type: &ConnectionType, target: &str, port: u16, bytes: &[u8]) -> Result<(), String> {
     match connection_type {
         ConnectionType::Lan => send_lan(target, port, bytes).await,
@@ -193,6 +233,151 @@ async fn send_to_target(connection_type: &ConnectionType, target: &str, port: u1
 }
 
 fn line(label: &str, value: &str) -> Vec<u8> { format!("{:<18}{:>14}\n", label, value).into_bytes() }
+
+fn payload_string(payload: &Value, key: &str) -> Option<String> {
+    payload.get(key).and_then(|v| v.as_str()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
+}
+
+fn payload_number(payload: &Value, key: &str) -> f64 {
+    payload.get(key)
+        .and_then(|value| value.as_f64().or_else(|| value.as_str().and_then(|v| v.parse::<f64>().ok())))
+        .unwrap_or(0.0)
+}
+
+fn clean_text(value: &str) -> String {
+    value.replace(['\r', '\n'], " ").trim().to_string()
+}
+
+fn truncate_chars(value: &str, max: usize) -> String {
+    let mut output = String::new();
+    for ch in value.chars().take(max) {
+        output.push(ch);
+    }
+    output
+}
+
+fn money(value: f64) -> String {
+    format!("{value:.2}")
+}
+
+fn item_quantity(item: &Value) -> f64 {
+    payload_number(item, "quantity")
+}
+
+fn receipt_bytes_from_payload(payload: &Value) -> Vec<u8> {
+    let mut b = Vec::new();
+    let business_name = payload_string(payload, "businessName").unwrap_or_else(|| "BIZ-SUITE CLOUD".to_string());
+    b.extend_from_slice(ESC_INIT);
+    b.extend_from_slice(ESC_ALIGN_CENTER);
+    b.extend_from_slice(ESC_BOLD_ON);
+    b.extend_from_slice(clean_text(&business_name).as_bytes());
+    b.extend_from_slice(b"\n");
+    b.extend_from_slice(ESC_BOLD_OFF);
+
+    for key in ["address", "phone"] {
+        if let Some(value) = payload_string(payload, key) {
+            b.extend_from_slice(clean_text(&value).as_bytes());
+            b.extend_from_slice(b"\n");
+        }
+    }
+
+    b.extend_from_slice(b"\n");
+    b.extend_from_slice(ESC_ALIGN_LEFT);
+    if let Some(order_number) = payload_string(payload, "orderNumber") {
+        b.extend_from_slice(format!("Order: {}\n", clean_text(&order_number)).as_bytes());
+    }
+    if let Some(table_name) = payload_string(payload, "tableName") {
+        b.extend_from_slice(format!("Table: {}\n", clean_text(&table_name)).as_bytes());
+    }
+    if let Some(customer_name) = payload_string(payload, "customerName") {
+        b.extend_from_slice(format!("Customer: {}\n", clean_text(&customer_name)).as_bytes());
+    }
+    b.extend_from_slice(b"--------------------------------\n");
+
+    if let Some(items) = payload.get("items").and_then(|items| items.as_array()) {
+        for item in items {
+            let name = payload_string(item, "name").unwrap_or_else(|| "Item".to_string());
+            let quantity = item_quantity(item);
+            let total = payload_number(item, "total");
+            let label = truncate_chars(&format!("{} x {}", money(quantity), clean_text(&name)), 21);
+            b.extend_from_slice(format!("{:<21}{:>11}\n", label, money(total)).as_bytes());
+            if let Some(notes) = payload_string(item, "notes") {
+                b.extend_from_slice(format!("  Note: {}\n", truncate_chars(&clean_text(&notes), 28)).as_bytes());
+            }
+        }
+    }
+
+    b.extend_from_slice(b"--------------------------------\n");
+    b.extend(line("Subtotal", &money(payload_number(payload, "subtotal"))).as_slice());
+    let discount = payload_number(payload, "discount");
+    if discount > 0.0 {
+        b.extend(line("Discount", &format!("-{}", money(discount))).as_slice());
+    }
+    let service_charge = payload_number(payload, "serviceCharge");
+    if service_charge > 0.0 {
+        b.extend(line("Service", &money(service_charge)).as_slice());
+    }
+    let tax = payload_number(payload, "tax");
+    if tax > 0.0 {
+        b.extend(line("Tax", &money(tax)).as_slice());
+    }
+    b.extend_from_slice(ESC_BOLD_ON);
+    b.extend(line("Total", &money(payload_number(payload, "total"))).as_slice());
+    b.extend_from_slice(ESC_BOLD_OFF);
+
+    if let Some(payment_method) = payload_string(payload, "paymentMethod") {
+        b.extend_from_slice(format!("\nPayment: {}\n", clean_text(&payment_method).to_uppercase()).as_bytes());
+    }
+    b.extend_from_slice(b"\nThank you.\n\n\n");
+    b.extend_from_slice(ESC_CUT);
+    b
+}
+
+fn kot_bytes_from_payload(payload: &Value) -> Vec<u8> {
+    let mut b = Vec::new();
+    let business_name = payload_string(payload, "businessName").unwrap_or_else(|| "BIZ-SUITE CLOUD".to_string());
+    b.extend_from_slice(ESC_INIT);
+    b.extend_from_slice(ESC_ALIGN_CENTER);
+    b.extend_from_slice(ESC_BOLD_ON);
+    b.extend_from_slice(b"KITCHEN ORDER TICKET\n");
+    b.extend_from_slice(ESC_BOLD_OFF);
+    b.extend_from_slice(clean_text(&business_name).as_bytes());
+    b.extend_from_slice(b"\n");
+
+    if let Some(order_number) = payload_string(payload, "orderNumber") {
+        b.extend_from_slice(format!("Order {}\n", clean_text(&order_number)).as_bytes());
+    }
+    if let Some(table_name) = payload_string(payload, "tableName") {
+        b.extend_from_slice(format!("{}\n", clean_text(&table_name)).as_bytes());
+    }
+
+    b.extend_from_slice(b"\n");
+    b.extend_from_slice(ESC_ALIGN_LEFT);
+    b.extend_from_slice(b"--------------------------------\n");
+
+    if let Some(items) = payload.get("items").and_then(|items| items.as_array()) {
+        for item in items {
+            let name = payload_string(item, "name").unwrap_or_else(|| "Item".to_string());
+            b.extend_from_slice(ESC_BOLD_ON);
+            b.extend_from_slice(format!("{} x {}\n", money(item_quantity(item)), clean_text(&name)).as_bytes());
+            b.extend_from_slice(ESC_BOLD_OFF);
+            if let Some(notes) = payload_string(item, "notes") {
+                b.extend_from_slice(format!("  Note: {}\n", clean_text(&notes)).as_bytes());
+            }
+            if let Some(modifiers) = item.get("modifiers").and_then(|value| value.as_object()) {
+                for (key, value) in modifiers {
+                    if let Some(modifier) = value.as_str() {
+                        b.extend_from_slice(format!("  {}: {}\n", clean_text(key), clean_text(modifier)).as_bytes());
+                    }
+                }
+            }
+        }
+    }
+
+    b.extend_from_slice(b"--------------------------------\nPrinted by Biz-Suite Device Bridge\n\n\n");
+    b.extend_from_slice(ESC_CUT);
+    b
+}
 
 fn sample_receipt_bytes() -> Vec<u8> {
     let mut b = Vec::new();
@@ -217,31 +402,34 @@ fn sample_kot_bytes() -> Vec<u8> {
 
 fn bytes_from_job(job: &DeviceJob) -> Vec<u8> {
     match job.job_type.as_str() {
-        "kot_print" => sample_kot_bytes(),
+        "kot_print" => job.payload.as_ref().map(kot_bytes_from_payload).unwrap_or_else(sample_kot_bytes),
         "drawer_kick" => DRAWER_KICK.to_vec(),
+        "receipt_print" => job.payload.as_ref().map(receipt_bytes_from_payload).unwrap_or_else(sample_receipt_bytes),
         _ => sample_receipt_bytes(),
     }
 }
 
 async fn execute_job(settings: &BridgeSettings, job: &DeviceJob) -> Result<(), String> {
     let bytes = bytes_from_job(job);
-    if job.job_type == "drawer_kick" || job.printer_role.as_deref() == Some("receipt") || job.job_type == "receipt_print" {
+    if job.job_type == "drawer_kick" || job.job_type == "test_print" || job.printer_role.as_deref() == Some("receipt") || job.job_type == "receipt_print" {
         send_to_target(&settings.receipt_connection_type, &settings.receipt_printer_target, settings.printer_port, &bytes).await
     } else {
-        let target = if settings.kot_printer_target.trim().is_empty() { &settings.receipt_printer_target } else { &settings.kot_printer_target };
-        send_to_target(&settings.kot_connection_type, target, settings.printer_port, &bytes).await
+        if settings.kot_printer_target.trim().is_empty() {
+            send_to_target(&settings.receipt_connection_type, &settings.receipt_printer_target, settings.printer_port, &bytes).await
+        } else {
+            send_to_target(&settings.kot_connection_type, &settings.kot_printer_target, settings.printer_port, &bytes).await
+        }
     }
 }
 
 async fn post_job_status(settings: &BridgeSettings, job_id: &str, status: &str, error: Option<String>) -> Result<(), String> {
-    let base = settings.cloud_base_url.trim().trim_end_matches('/');
     let token = settings.device_token.trim();
-    if base.is_empty() || token.is_empty() { return Ok(()); }
-    let url = format!("{base}/jobs/{job_id}/{status}");
+    if token.is_empty() { return Ok(()); }
+    let url = format!("{CLOUD_BRIDGE_URL}/jobs/{job_id}/{status}");
     let body = serde_json::json!({ "error": error });
-    reqwest::Client::new().post(url).bearer_auth(token).json(&body).send().await
+    let response = reqwest::Client::new().post(url).bearer_auth(token).json(&body).send().await
         .map_err(|e| format!("Could not report job status: {e}"))?;
-    Ok(())
+    require_bridge_success(response, "Could not report job status").await
 }
 
 #[tauri::command]
@@ -252,6 +440,9 @@ async fn save_settings(app: tauri::AppHandle, mut settings: BridgeSettings) -> R
     let existing = load_settings_from_disk(&app).unwrap_or_default();
     settings.device_token = existing.device_token;
     settings.device_id = existing.device_id;
+    if !settings.device_token.trim().is_empty() {
+        settings.device_name = existing.device_name;
+    }
     if settings.printer_port == 0 { return Err("Printer port is invalid.".to_string()); }
     save_settings_to_disk(&app, &settings)?;
     Ok("Settings saved.".to_string())
@@ -275,12 +466,15 @@ async fn list_installed_printers() -> Result<Vec<String>, String> {
 #[tauri::command]
 async fn pair_device(app: tauri::AppHandle, pairing_code: String, settings: BridgeSettings) -> Result<String, String> {
     if pairing_code.trim().is_empty() { return Err("Pairing code is required.".to_string()); }
-    let base = settings.cloud_base_url.trim().trim_end_matches('/');
-    if base.is_empty() { return Err("Cloud bridge URL is required.".to_string()); }
+    let existing = load_settings_from_disk(&app).unwrap_or_default();
     let request = PairRequest { pairing_code, device_name: settings.device_name.clone(), platform: "windows".to_string(), app_version: env!("CARGO_PKG_VERSION").to_string() };
-    let response: PairResponse = reqwest::Client::new().post(format!("{base}/pair")).json(&request).send().await
-        .map_err(|e| format!("Could not call pairing endpoint: {e}"))?
-        .json().await.map_err(|e| format!("Pairing response was invalid: {e}"))?;
+    let client = reqwest::Client::new();
+    let mut call = client.post(format!("{CLOUD_BRIDGE_URL}/pair")).json(&request);
+    if !existing.device_token.trim().is_empty() {
+        call = call.bearer_auth(existing.device_token);
+    }
+    let response = call.send().await.map_err(|e| format!("Could not call pairing endpoint: {e}"))?;
+    let response: PairResponse = read_bridge_response(response, "Could not pair device").await?;
     let mut saved = settings;
     saved.device_id = response.device_id;
     saved.device_token = response.device_token;
@@ -292,7 +486,7 @@ async fn pair_device(app: tauri::AppHandle, pairing_code: String, settings: Brid
 async fn test_receipt_connection(settings: BridgeSettings) -> Result<String, String> {
     match settings.receipt_connection_type {
         ConnectionType::Lan => { let _ = connect_lan_printer(&settings.receipt_printer_target, settings.printer_port).await?; }
-        ConnectionType::Windows => { if settings.receipt_printer_target.trim().is_empty() { return Err("Windows printer name is required.".to_string()); } }
+        ConnectionType::Windows => validate_windows_printer(&settings.receipt_printer_target)?,
     }
     Ok("Receipt printer route looks valid.".to_string())
 }
@@ -305,8 +499,11 @@ async fn print_sample_receipt(settings: BridgeSettings) -> Result<String, String
 
 #[tauri::command]
 async fn print_sample_kot(settings: BridgeSettings) -> Result<String, String> {
-    let target = if settings.kot_printer_target.trim().is_empty() { &settings.receipt_printer_target } else { &settings.kot_printer_target };
-    send_to_target(&settings.kot_connection_type, target, settings.printer_port, &sample_kot_bytes()).await?;
+    if settings.kot_printer_target.trim().is_empty() {
+        send_to_target(&settings.receipt_connection_type, &settings.receipt_printer_target, settings.printer_port, &sample_kot_bytes()).await?;
+    } else {
+        send_to_target(&settings.kot_connection_type, &settings.kot_printer_target, settings.printer_port, &sample_kot_bytes()).await?;
+    }
     Ok("Sample KOT sent.".to_string())
 }
 
@@ -319,18 +516,27 @@ async fn kick_drawer(settings: BridgeSettings) -> Result<String, String> {
 #[tauri::command]
 async fn poll_jobs_once(app: tauri::AppHandle) -> Result<String, String> {
     let settings = load_settings_from_disk(&app)?;
-    let base = settings.cloud_base_url.trim().trim_end_matches('/');
     let token = settings.device_token.trim();
-    if base.is_empty() || token.is_empty() { return Err("Device is not paired. Add cloud URL and pair first.".to_string()); }
-    let response: PollResponse = reqwest::Client::new().post(format!("{base}/jobs/poll")).bearer_auth(token).send().await
-        .map_err(|e| format!("Could not poll jobs: {e}"))?
-        .json().await.map_err(|e| format!("Poll response was invalid: {e}"))?;
+    if token.is_empty() { return Err("Device is not paired. Enter the pairing code first.".to_string()); }
+    let response = reqwest::Client::new().post(format!("{CLOUD_BRIDGE_URL}/jobs/poll")).bearer_auth(token).send().await
+        .map_err(|e| format!("Could not poll jobs: {e}"))?;
+    let response: PollResponse = read_bridge_response(response, "Could not poll jobs").await?;
     let count = response.jobs.len();
+    let mut failed = 0;
     for job in response.jobs {
         match execute_job(&settings, &job).await {
-            Ok(_) => { let _ = post_job_status(&settings, &job.id, "complete", None).await; }
-            Err(e) => { let _ = post_job_status(&settings, &job.id, "fail", Some(e)).await; }
+            Ok(_) => {
+                post_job_status(&settings, &job.id, "complete", None).await?;
+            }
+            Err(print_error) => {
+                post_job_status(&settings, &job.id, "fail", Some(print_error.clone())).await
+                    .map_err(|status_error| format!("Print failed: {print_error}. Could not report failure: {status_error}"))?;
+                failed += 1;
+            }
         }
+    }
+    if failed > 0 {
+        return Err(format!("Processed {count} cloud job(s); {failed} print job(s) failed. Check printer routing."));
     }
     Ok(format!("Polled cloud and processed {count} job(s)."))
 }

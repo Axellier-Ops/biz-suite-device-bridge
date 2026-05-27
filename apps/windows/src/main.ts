@@ -4,7 +4,6 @@ import "./styles.css";
 type ConnectionType = "lan" | "windows";
 
 type BridgeSettings = {
-  cloudBaseUrl: string;
   deviceToken: string;
   deviceId: string;
   receiptConnectionType: ConnectionType;
@@ -17,7 +16,6 @@ type BridgeSettings = {
 
 const statusPill = document.getElementById("status-pill")!;
 const logEl = document.getElementById("log")!;
-const cloudBaseUrlEl = document.getElementById("cloud-base-url") as HTMLInputElement;
 const receiptConnectionTypeEl = document.getElementById("receipt-connection-type") as HTMLSelectElement;
 const kotConnectionTypeEl = document.getElementById("kot-connection-type") as HTMLSelectElement;
 const receiptPrinterTargetEl = document.getElementById("receipt-printer-target") as HTMLInputElement;
@@ -26,8 +24,29 @@ const printerPortEl = document.getElementById("printer-port") as HTMLInputElemen
 const pairingCodeEl = document.getElementById("pairing-code") as HTMLInputElement;
 const deviceNameEl = document.getElementById("device-name") as HTMLInputElement;
 const installedPrintersEl = document.getElementById("installed-printers") as HTMLSelectElement;
+const pairingStatusEl = document.getElementById("pairing-status")!;
+const pairingHelpEl = document.getElementById("pairing-help")!;
+const pairButtonEl = document.getElementById("pair") as HTMLButtonElement;
+const repairButtonEl = document.getElementById("repair") as HTMLButtonElement;
+const pollOnceButtonEl = document.getElementById("poll-once") as HTMLButtonElement;
+const pollLoopButtonEl = document.getElementById("poll-loop") as HTMLButtonElement;
 
 let polling = false;
+
+const thermalPrinterNameHints = [
+  "receipt",
+  "thermal",
+  "pos",
+  "epson",
+  "tm-",
+  "bixolon",
+  "star",
+  "citizen",
+  "xprinter",
+  "rongta",
+  "gprinter",
+  "munbyn",
+];
 
 function setStatus(text: string, mode: "idle" | "ok" | "error" = "idle") {
   statusPill.textContent = text;
@@ -39,6 +58,28 @@ function log(message: string) {
   logEl.textContent = `[${timestamp}] ${message}\n${logEl.textContent}`;
 }
 
+function setPairingState(isPaired: boolean, editing = false) {
+  const identityLocked = isPaired && !editing;
+  pairingCodeEl.value = "";
+  pairingCodeEl.disabled = identityLocked;
+  pairingCodeEl.placeholder = identityLocked ? "Already paired" : "842913";
+  deviceNameEl.disabled = identityLocked;
+  pairButtonEl.classList.toggle("hidden", identityLocked);
+  pairButtonEl.textContent = isPaired ? "Apply new pairing" : "Pair with cloud";
+  repairButtonEl.classList.toggle("hidden", !identityLocked);
+  pollOnceButtonEl.disabled = !isPaired;
+  pollLoopButtonEl.disabled = !isPaired;
+  pairingStatusEl.textContent = isPaired
+    ? editing
+      ? "Paired - changing"
+      : "Paired"
+    : "Not paired";
+  pairingStatusEl.className = `pair-state ${isPaired ? "paired" : "not-paired"}`;
+  pairingHelpEl.textContent = identityLocked
+    ? "This bridge is securely paired. Pair again only when moving it to another register or business."
+    : "Connects securely to Biz-Suite Cloud. Enter the one-time pairing code from your POS settings.";
+}
+
 function getPort(): number {
   const value = Number(printerPortEl.value || "9100");
   return Number.isFinite(value) && value > 0 ? value : 9100;
@@ -46,7 +87,6 @@ function getPort(): number {
 
 function getSettings(): BridgeSettings {
   return {
-    cloudBaseUrl: cloudBaseUrlEl.value.trim(),
     deviceToken: "",
     deviceId: "",
     receiptConnectionType: receiptConnectionTypeEl.value as ConnectionType,
@@ -74,17 +114,28 @@ async function runAction(label: string, action: () => Promise<string>) {
 
 async function loadSettings() {
   const settings = await invoke<BridgeSettings>("load_settings");
-  cloudBaseUrlEl.value = settings.cloudBaseUrl || "";
   receiptConnectionTypeEl.value = settings.receiptConnectionType || "lan";
   kotConnectionTypeEl.value = settings.kotConnectionType || "lan";
   receiptPrinterTargetEl.value = settings.receiptPrinterTarget || "";
   kotPrinterTargetEl.value = settings.kotPrinterTarget || "";
   printerPortEl.value = String(settings.printerPort || 9100);
   deviceNameEl.value = settings.deviceName || "Front Counter PC";
+  setPairingState(Boolean(settings.deviceToken));
   log(settings.deviceToken ? "Settings loaded. Device is paired." : "Settings loaded. Device is not paired.");
 }
 
-async function refreshPrinters() {
+function autoDetectedPrinter(printers: string[]): string | null {
+  const likelyThermalPrinters = printers.filter((printer) => {
+    const normalized = printer.toLowerCase();
+    return thermalPrinterNameHints.some((hint) => normalized.includes(hint));
+  });
+
+  if (likelyThermalPrinters.length === 1) return likelyThermalPrinters[0];
+  if (likelyThermalPrinters.length === 0 && printers.length === 1) return printers[0];
+  return null;
+}
+
+async function refreshPrinters(autoConfigure = false) {
   const printers = await invoke<string[]>("list_installed_printers");
   installedPrintersEl.innerHTML = "";
   for (const printer of printers) {
@@ -94,26 +145,53 @@ async function refreshPrinters() {
     installedPrintersEl.appendChild(option);
   }
   log(`Loaded ${printers.length} installed printer(s).`);
+
+  if (!autoConfigure || receiptPrinterTargetEl.value.trim()) return;
+
+  const detectedPrinter = autoDetectedPrinter(printers);
+  if (!detectedPrinter) {
+    if (printers.length > 0) {
+      log("Multiple printers found. Select the receipt printer to prevent incorrect routing.");
+    }
+    return;
+  }
+
+  receiptConnectionTypeEl.value = "windows";
+  receiptPrinterTargetEl.value = detectedPrinter;
+  if (!kotPrinterTargetEl.value.trim()) {
+    kotConnectionTypeEl.value = "windows";
+    kotPrinterTargetEl.value = detectedPrinter;
+  }
+  await invoke<string>("save_settings", { settings: getSettings() });
+  log(`Auto-configured Windows printer: ${detectedPrinter}.`);
 }
 
 document.getElementById("save-settings")?.addEventListener("click", () => {
-  runAction("Save settings", async () => invoke<string>("save_settings", { settings: getSettings() }));
+  runAction("Save printer settings", async () => invoke<string>("save_settings", { settings: getSettings() }));
 });
 
 document.getElementById("refresh-printers")?.addEventListener("click", () => {
   runAction("Refresh installed printers", async () => {
-    await refreshPrinters();
+    await refreshPrinters(true);
     return "Installed printers refreshed.";
   });
 });
 
 document.getElementById("use-selected-receipt")?.addEventListener("click", () => {
+  if (!installedPrintersEl.value) {
+    log("No installed printer is selected. Refresh printers and select one first.");
+    return;
+  }
   receiptConnectionTypeEl.value = "windows";
   receiptPrinterTargetEl.value = installedPrintersEl.value;
   log(`Receipt printer set to ${installedPrintersEl.value}.`);
 });
 
 document.getElementById("use-selected-kot")?.addEventListener("click", () => {
+  if (!installedPrintersEl.value) {
+    log("No installed printer is selected. Refresh printers and select one first.");
+    return;
+  }
   kotConnectionTypeEl.value = "windows";
   kotPrinterTargetEl.value = installedPrintersEl.value;
   log(`KOT printer set to ${installedPrintersEl.value}.`);
@@ -136,10 +214,19 @@ document.getElementById("drawer-kick")?.addEventListener("click", () => {
 });
 
 document.getElementById("pair")?.addEventListener("click", () => {
-  runAction("Cloud pairing", async () => invoke<string>("pair_device", {
-    pairingCode: pairingCodeEl.value.trim(),
-    settings: getSettings(),
-  }));
+  runAction("Cloud pairing", async () => {
+    const result = await invoke<string>("pair_device", {
+      pairingCode: pairingCodeEl.value.trim(),
+      settings: getSettings(),
+    });
+    setPairingState(true);
+    return result;
+  });
+});
+
+document.getElementById("repair")?.addEventListener("click", () => {
+  setPairingState(true, true);
+  log("Existing pairing remains active until a new one-time pairing code succeeds.");
 });
 
 document.getElementById("poll-once")?.addEventListener("click", () => {
@@ -148,10 +235,14 @@ document.getElementById("poll-once")?.addEventListener("click", () => {
 
 document.getElementById("poll-loop")?.addEventListener("click", async () => {
   if (polling) {
-    log("Polling loop already running.");
+    polling = false;
+    pollLoopButtonEl.textContent = "Run polling loop";
+    setStatus("Paired", "ok");
+    log("Polling loop stopped.");
     return;
   }
   polling = true;
+  pollLoopButtonEl.textContent = "Stop polling loop";
   setStatus("Polling", "ok");
   log("Polling loop started. Keep this app open.");
   while (polling) {
@@ -166,7 +257,7 @@ document.getElementById("poll-loop")?.addEventListener("click", async () => {
 });
 
 loadSettings()
-  .then(refreshPrinters)
+  .then(() => refreshPrinters(true))
   .catch((error) => {
     setStatus("Error", "error");
     log(`Startup error: ${String(error)}`);

@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Biz Suite Cloud POS</title>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Biz Suite Cloud POS shell</p>
+          <h1>Biz Suite Cloud POS</h1>
+          <p class="subtle">Windows POS shell for patas.cloud with local printer, KOT and cash drawer access.</p>
+        </div>
+        <div id="status-pill" class="pill idle">Idle</div>
+      </header>
+
+      <section class="card">
+        <div class="section-heading">
+          <h2>Cloud pairing and job polling</h2>
+          <div id="pairing-status" class="pair-state not-paired">Not paired</div>
+        </div>
+        <p id="pairing-help" class="subtle">Connects securely to Biz-Suite Cloud. After pairing, the bridge starts polling automatically so POS print jobs do not sit in the queue.</p>
+        <div class="grid">
+          <label>
+            Pairing code
+            <input id="pairing-code" placeholder="842913" autocomplete="off" />
+          </label>
+          <label>
+            Device name
+            <input id="device-name" placeholder="Front Counter PC" autocomplete="off" />
+          </label>
+        </div>
+        <div class="actions wrap">
+          <button id="pair">Pair with cloud</button>
+          <button id="repair" class="outline hidden">Pair another device</button>
+          <button id="poll-once" class="secondary" disabled>Poll jobs once</button>
+          <button id="poll-loop" class="secondary" disabled>Run polling loop</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <h2>Printer routing</h2>
+          <button id="refresh-printers" class="outline-success compact">Refresh installed printers</button>
+        </div>
+        <p class="subtle">A single Windows-installed thermal printer is set automatically as receipt and KOT. Select manually when several printers are installed.</p>
+        <div class="grid">
+          <label>
+            Receipt connection
+            <select id="receipt-connection-type">
+              <option value="lan">LAN/IP printer</option>
+              <option value="windows">Windows-installed printer</option>
+            </select>
+          </label>
+          <label>
+            Receipt IP / Windows printer name
+            <input id="receipt-printer-target" placeholder="192.168.1.50 or EPSON TM-T82" autocomplete="off" />
+          </label>
+          <label>
+            KOT IP / Windows printer name
+            <input id="kot-printer-target" placeholder="192.168.1.51 or Kitchen Printer" autocomplete="off" />
+          </label>
+          <label>
+            KOT connection
+            <select id="kot-connection-type">
+              <option value="lan">LAN/IP printer</option>
+              <option value="windows">Windows-installed printer</option>
+            </select>
+          </label>
+          <label>
+            ESC/POS port for LAN printers
+            <input id="printer-port" placeholder="9100" autocomplete="off" inputmode="numeric" />
+          </label>
+          <label>
+            Installed printers
+            <select id="installed-printers"></select>
+          </label>
+        </div>
+        <div class="actions wrap">
+          <button id="save-settings">Save printer settings</button>
+          <button id="use-selected-receipt" class="secondary">Use selected as receipt</button>
+          <button id="use-selected-kot" class="secondary">Use selected as KOT</button>
+          <button id="test-connection" class="secondary">Test receipt connection</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="section-heading">
+          <h2>App updates and startup</h2>
+          <div id="update-status" class="pair-state not-paired">Checking</div>
+        </div>
+        <p id="update-help" class="subtle">Your pairing and printer connections are stored on this computer and kept when the app is updated.</p>
+        <label class="checkbox-row">
+          <input id="launch-on-startup" type="checkbox" checked />
+          Start Biz Suite Cloud POS automatically when this computer starts
+        </label>
+        <div class="actions wrap">
+          <button id="check-updates" class="outline-success">Check for updates</button>
+          <button id="download-update" class="hidden">Download update</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Test actions</h2>
+        <p class="subtle">Use these before connecting live Biz-Suite Cloud jobs.</p>
+        <div class="actions wrap">
+          <button id="sample-receipt">Print sample receipt</button>
+          <button id="sample-kot">Print sample KOT</button>
+          <button id="drawer-kick" class="danger">Open cash drawer</button>
+        </div>
+      </section>
+
+      <section class="card log-card">
+        <h2>Event log</h2>
+        <pre id="log">Ready.</pre>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

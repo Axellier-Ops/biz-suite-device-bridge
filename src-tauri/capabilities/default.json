@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/remote-schema.json",
+  "identifier": "default",
+  "description": "Allow Biz Suite Cloud POS to access native printer commands from Patas Cloud only",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://www.patas.cloud", "https://patas.cloud"]
+  },
+  "permissions": ["core:default"]
+}

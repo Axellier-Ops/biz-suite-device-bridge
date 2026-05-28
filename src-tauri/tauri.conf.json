@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Biz Suite Cloud POS",
+  "version": "0.1.0",
+  "identifier": "cloud.bizsuite.pos.windows",
+  "build": {
+    "devUrl": "https://www.patas.cloud/login",
+    "frontendDist": "https://www.patas.cloud/login"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Biz Suite Cloud POS",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1024,
+        "minHeight": 720
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico"],
+    "publisher": "Axellier Ops",
+    "shortDescription": "Windows shell for Biz Suite Cloud POS",
+    "longDescription": "Biz Suite Cloud POS loads patas.cloud in a Windows WebView and exposes local printer and cash drawer commands to the POS.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "offlineInstaller",
+        "silent": true
+      }
+    }
+  }
+}

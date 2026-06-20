@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use image::imageops::FilterType;
 use std::ffi::OsStr;
 use std::fs;
 use std::net::SocketAddr;
@@ -31,7 +32,11 @@ const ESC_BOLD_OFF: &[u8] = b"\x1B\x45\x00";
 const ESC_CUT: &[u8] = b"\x1D\x56\x00";
 const DRAWER_KICK: &[u8] = b"\x1B\x70\x00\x19\xFA";
 const CLOUD_BRIDGE_URL: &str = "https://www.patas.cloud/api/device-bridge";
+const DEFAULT_RECEIPT_LOGO_URL: &str = "https://www.patas.cloud/logo-no-bg.png";
 const SETTINGS_VERSION: u32 = 1;
+const MAX_LOGO_BYTES: u64 = 1_000_000;
+const RECEIPT_LOGO_MAX_WIDTH: u32 = 192;
+const RECEIPT_LOGO_MAX_HEIGHT: u32 = 96;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -317,11 +322,81 @@ fn item_quantity(item: &Value) -> f64 {
     payload_number(item, "quantity")
 }
 
-fn receipt_bytes_from_payload(payload: &Value) -> Vec<u8> {
+async fn receipt_logo_bytes(payload: &Value) -> Option<Vec<u8>> {
+    let logo_url = payload_string(payload, "logoUrl").unwrap_or_else(|| DEFAULT_RECEIPT_LOGO_URL.to_string());
+    if !logo_url.starts_with("https://") {
+        return None;
+    }
+
+    let response = reqwest::Client::new()
+        .get(logo_url)
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await
+        .ok()?;
+    if !response.status().is_success() {
+        return None;
+    }
+    if response.content_length().unwrap_or(0) > MAX_LOGO_BYTES {
+        return None;
+    }
+
+    let bytes = response.bytes().await.ok()?;
+    if bytes.len() as u64 > MAX_LOGO_BYTES {
+        return None;
+    }
+
+    let image = image::load_from_memory(&bytes).ok()?;
+    let original_width = image.width().max(1);
+    let original_height = image.height().max(1);
+    let width_scale = RECEIPT_LOGO_MAX_WIDTH as f32 / original_width as f32;
+    let height_scale = RECEIPT_LOGO_MAX_HEIGHT as f32 / original_height as f32;
+    let scale = width_scale.min(height_scale).min(1.0);
+    let target_width = ((original_width as f32 * scale).round() as u32).max(1);
+    let target_height = ((original_height as f32 * scale).round() as u32).max(1);
+    let resized = image.resize(target_width, target_height, FilterType::Lanczos3).to_rgba8();
+
+    let raster_width_bytes = ((target_width + 7) / 8) as usize;
+    let mut raster = vec![0u8; raster_width_bytes * target_height as usize];
+    for y in 0..target_height {
+        for x in 0..target_width {
+            let pixel = resized.get_pixel(x, y);
+            let alpha = pixel[3] as f32 / 255.0;
+            let luminance =
+                0.299 * pixel[0] as f32 + 0.587 * pixel[1] as f32 + 0.114 * pixel[2] as f32;
+            let composited = 255.0 * (1.0 - alpha) + luminance * alpha;
+            if composited < 190.0 {
+                let index = y as usize * raster_width_bytes + (x / 8) as usize;
+                raster[index] |= 0x80u8 >> (x % 8);
+            }
+        }
+    }
+
+    let mut b = Vec::new();
+    b.extend_from_slice(ESC_ALIGN_CENTER);
+    b.extend_from_slice(&[
+        0x1D,
+        0x76,
+        0x30,
+        0x00,
+        (raster_width_bytes & 0xFF) as u8,
+        ((raster_width_bytes >> 8) & 0xFF) as u8,
+        (target_height & 0xFF) as u8,
+        ((target_height >> 8) & 0xFF) as u8,
+    ]);
+    b.extend_from_slice(&raster);
+    b.extend_from_slice(b"\n");
+    Some(b)
+}
+
+async fn receipt_bytes_from_payload(payload: &Value) -> Vec<u8> {
     let mut b = Vec::new();
     let business_name = payload_string(payload, "businessName").unwrap_or_else(|| "BIZ-SUITE CLOUD".to_string());
     b.extend_from_slice(ESC_INIT);
     b.extend_from_slice(ESC_ALIGN_CENTER);
+    if let Some(logo) = receipt_logo_bytes(payload).await {
+        b.extend_from_slice(&logo);
+    }
     b.extend_from_slice(ESC_BOLD_ON);
     b.extend_from_slice(clean_text(&business_name).as_bytes());
     b.extend_from_slice(b"\n");
@@ -381,7 +456,12 @@ fn receipt_bytes_from_payload(payload: &Value) -> Vec<u8> {
     if let Some(payment_method) = payload_string(payload, "paymentMethod") {
         b.extend_from_slice(format!("\nPayment: {}\n", clean_text(&payment_method).to_uppercase()).as_bytes());
     }
-    b.extend_from_slice(b"\nThank you.\n\n\n");
+    b.extend_from_slice(ESC_ALIGN_CENTER);
+    b.extend_from_slice(b"\nThank you.\n");
+    b.extend_from_slice(b"Powered by Biz Suite Cloud POS\n");
+    b.extend_from_slice(ESC_BOLD_ON);
+    b.extend_from_slice(b"www.patas.cloud\n\n\n");
+    b.extend_from_slice(ESC_BOLD_OFF);
     b.extend_from_slice(ESC_CUT);
     b
 }
@@ -432,7 +512,7 @@ fn kot_bytes_from_payload(payload: &Value) -> Vec<u8> {
     b
 }
 
-fn sample_receipt_bytes() -> Vec<u8> {
+async fn sample_receipt_bytes() -> Vec<u8> {
     receipt_bytes_from_payload(&serde_json::json!({
         "businessName": "Demo F&B",
         "address": "123 Demo Street",
@@ -449,7 +529,7 @@ fn sample_receipt_bytes() -> Vec<u8> {
         "tax": 486.75,
         "total": 3731.75,
         "paymentMethod": "cash"
-    }))
+    })).await
 }
 
 fn sample_kot_bytes() -> Vec<u8> {
@@ -462,17 +542,20 @@ fn sample_kot_bytes() -> Vec<u8> {
     b.extend_from_slice(b"--------------------------------\nPrinted by Biz Suite Cloud POS\n\n\n"); b.extend_from_slice(ESC_CUT); b
 }
 
-fn bytes_from_job(job: &DeviceJob) -> Vec<u8> {
+async fn bytes_from_job(job: &DeviceJob) -> Vec<u8> {
     match job.job_type.as_str() {
         "kot_print" => job.payload.as_ref().map(kot_bytes_from_payload).unwrap_or_else(sample_kot_bytes),
         "drawer_kick" => DRAWER_KICK.to_vec(),
-        "receipt_print" => job.payload.as_ref().map(receipt_bytes_from_payload).unwrap_or_else(sample_receipt_bytes),
-        _ => sample_receipt_bytes(),
+        "receipt_print" => match job.payload.as_ref() {
+            Some(payload) => receipt_bytes_from_payload(payload).await,
+            None => sample_receipt_bytes().await,
+        },
+        _ => sample_receipt_bytes().await,
     }
 }
 
 async fn execute_job(settings: &BridgeSettings, job: &DeviceJob) -> Result<(), String> {
-    let bytes = bytes_from_job(job);
+    let bytes = bytes_from_job(job).await;
     if job.job_type == "drawer_kick" || job.job_type == "test_print" || job.printer_role.as_deref() == Some("receipt") || job.job_type == "receipt_print" {
         send_to_target(&settings.receipt_connection_type, &settings.receipt_printer_target, settings.printer_port, &bytes).await
     } else {
@@ -579,7 +662,8 @@ async fn test_receipt_connection(settings: BridgeSettings) -> Result<String, Str
 
 #[tauri::command]
 async fn print_sample_receipt(settings: BridgeSettings) -> Result<String, String> {
-    send_to_target(&settings.receipt_connection_type, &settings.receipt_printer_target, settings.printer_port, &sample_receipt_bytes()).await?;
+    let bytes = sample_receipt_bytes().await;
+    send_to_target(&settings.receipt_connection_type, &settings.receipt_printer_target, settings.printer_port, &bytes).await?;
     Ok("Sample receipt sent.".to_string())
 }
 
@@ -602,7 +686,7 @@ async fn kick_drawer(settings: BridgeSettings) -> Result<String, String> {
 #[tauri::command]
 async fn print_receipt_payload(app: tauri::AppHandle, payload: Value) -> Result<String, String> {
     let settings = load_settings_from_disk(&app)?;
-    let bytes = receipt_bytes_from_payload(&payload);
+    let bytes = receipt_bytes_from_payload(&payload).await;
     send_to_target(
         &settings.receipt_connection_type,
         &settings.receipt_printer_target,

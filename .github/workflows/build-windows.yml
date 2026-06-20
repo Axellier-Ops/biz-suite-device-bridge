@@ -2,9 +2,15 @@ name: Build Windows Cloud POS Shell
 
 on:
   workflow_dispatch:
+  push:
+    tags:
+      - "cloud-pos-windows-v*"
   pull_request:
     paths:
       - "**"
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -32,3 +38,14 @@ jobs:
         with:
           name: Biz-Suite-Cloud-POS-Windows
           path: downloads/windows/Biz-Suite-Cloud-POS-Windows-*.exe
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/cloud-pos-windows-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Biz Suite Cloud POS Windows ${{ github.ref_name }}
+          files: downloads/windows/Biz-Suite-Cloud-POS-Windows-*.exe
+          body: |
+            Windows installer for Biz Suite Cloud POS.
+
+            Includes receipt logo/footer rendering updates.
